@@ -1,6 +1,6 @@
 # NyxMesh
 
-**Enhanced P2P Distributed Computing — Browser-Only**
+**P2P Distributed Computing in the Browser*
 
 NyxMesh turns your browser into a distributed compute node.  
 No backend. No accounts. No deploy. Just open the HTML file and start trading compute tasks over WebRTC.
