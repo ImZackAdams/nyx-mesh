@@ -10,7 +10,7 @@ No backend. No accounts. No deploy. Just open the HTML file and start trading co
 ##  Features
 
 - **P2P over WebRTC** — Coordinator/Worker roles with manual copy/paste signaling (no server required).
-- **Built-in Task Library**:
+- **Built in Task Library**:
   - Matrix Multiplication
   - Prime Search
   - Mandelbrot Set
