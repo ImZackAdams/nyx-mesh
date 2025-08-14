@@ -118,6 +118,8 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ## Limitations
 
+*This is not AWS Lambda in a tab. It’s volatile by design, peer limited, and bound by browser constraints.*
+
 - **No TURN** — peers behind restrictive NAT/firewalls may fail to connect.
 - **UI Blocking** — large problem sizes will freeze the page during computation.
 - **Manual Signaling** — good for demos; add a signaling server for automation.
@@ -127,10 +129,10 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ## Roadmap Ideas
 
-- Web Worker pool for multi-threaded task execution.
+- Web Worker pool for multi threaded task execution.
 - Automatic ICE restarts and reconnection handling.
 - True throughput measurement & enforcement.
-- Multi-peer Coordinator mode.
+- Multi peer Coordinator mode.
 - Optional WebGPU acceleration for supported tasks.
 
 ---
