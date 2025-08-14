@@ -1,4 +1,4 @@
-# NyxMesh 🚀
+# NyxMesh
 
 **Enhanced P2P Distributed Computing — Browser-Only**
 
@@ -7,7 +7,7 @@ No backend. No accounts. No deploy. Just open the HTML file and start trading co
 
 ---
 
-## ✨ Features
+##  Features
 
 - **P2P over WebRTC** — Coordinator/Worker roles with manual copy/paste signaling (no server required).
 - **Built-in Task Library**:
@@ -24,7 +24,7 @@ No backend. No accounts. No deploy. Just open the HTML file and start trading co
 
 ---
 
-## 📂 Getting Started
+## Getting Started
 
 ### 1. Clone or Download
 ```bash
@@ -52,7 +52,7 @@ You can also just drag the file into a browser window.
 
 ---
 
-## 🖥️ Demo Instructions
+## 🖥Demo Instructions
 
 NyxMesh runs entirely client side, so you need two browser windows/tabs (or two different machines) to connect.
 
@@ -89,7 +89,7 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ---
 
-## 📊 UI Overview
+## UI Overview
 
 ### Left Panel — Peer Setup
 - Capability detection (WebRTC, WebGPU, CPU, Memory)
@@ -107,7 +107,7 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ---
 
-## 🛠 Technical Notes
+## Technical Notes
 
 - **Transport**: WebRTC RTCDataChannel (`ordered: true`, `maxRetransmits: 3`)
 - **Signaling**: Manual JSON copy/paste (no STUN/TURN servers beyond Google public STUN; no relay fallback)
@@ -116,7 +116,7 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ---
 
-## ⚠️ Limitations
+## Limitations
 
 - **No TURN** — peers behind restrictive NAT/firewalls may fail to connect.
 - **UI Blocking** — large problem sizes will freeze the page during computation.
@@ -125,7 +125,7 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ---
 
-## 🔮 Roadmap Ideas
+## Roadmap Ideas
 
 - Web Worker pool for multi-threaded task execution.
 - Automatic ICE restarts and reconnection handling.
@@ -135,13 +135,13 @@ Worker computes and returns results, Coordinator logs GFLOPS and updates metrics
 
 ---
 
-## 📜 License
+## License
 
 MIT License — see LICENSE for details.
 
 ---
 
-## 🧪 Quick Demo (Local Loopback)
+## Quick Demo (Local Loopback)
 
 1. Open `nyxmesh.html` twice in your browser (two tabs or two windows).
 2. Assign one **Coordinator**, one **Worker**.
