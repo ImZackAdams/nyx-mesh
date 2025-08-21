@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • P2P Blackjack Simulator (Multi-Worker, WS/RTC)</title>
+<title>NyxMesh • P2P Boids Swarm (Multi-Worker, WS/RTC)</title>
 <style>
   :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d}
   *{box-sizing:border-box} html,body{height:100%}
@@ -18,7 +18,7 @@
   .btn.secondary{background:#2a2a38;color:var(--ink);border:1px solid #333349}
   .btn.ghost{background:transparent;border:1px dashed #333349;color:var(--muted)}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  input,select,textarea{width:100%;background:#0f0f16;color:#0ef;border:1px solid #282838;border-radius:8px;padding:10px}
+  input,select{width:100%;background:#0f0f16;color:#0ef;border:1px solid #282838;border-radius:8px;padding:10px}
   .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#24243a;color:var(--ink);font-size:12px}
   .ok{background:#1d3d23;color:var(--good)}.warn{background:#3d3d1d;color:var(--warn)}.bad{background:#3d1d1d;color:var(--bad)}
@@ -38,7 +38,7 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🃏 NyxMesh Blackjack (Multi-Worker)</h1>
+    <h1>🕊️ NyxMesh Boids Swarm (Multi-Worker)</h1>
     <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
     <div class="kv"><span>Workers</span><span id="workerCount" class="pill">0</span></div>
     <div class="kv"><span>Scheduler</span><span id="sched" class="pill">idle</span></div>
@@ -54,37 +54,55 @@
     </div>
     <div class="status" id="status">Create a session and send the link to workers.</div>
 
-    <h2>Simulation Controls</h2>
+    <h2>Swarm Controls</h2>
     <div class="grid">
-      <label>Hands per cell
-        <input id="hands" type="number" value="5000" min="100" step="100"/>
-        <small>Monte Carlo runs per (player total × dealer upcard)</small>
+      <label>Boids
+        <input id="numBoids" type="number" value="600" min="50" step="50"/>
+        <small>Total agents in the flock</small>
       </label>
-      <label>Policy
-        <select id="policy">
-          <option value="basic" selected>Basic-ish Strategy</option>
-          <option value="hitStandFixed">Hit below N</option>
-        </select>
-        <small>Player decision rule</small>
+      <label>Perception
+        <input id="perception" type="number" value="42" min="10" max="200" step="2"/>
+        <small>Neighbor radius (px)</small>
       </label>
     </div>
     <div class="grid" style="margin-top:8px">
-      <label>Hit below (for Hit/Stand)
-        <input id="hitBelow" type="number" value="17" min="5" max="21"/>
-        <small>Only used for “Hit below N” policy</small>
+      <label>Max Speed
+        <input id="maxSpeed" type="number" value="2.2" min="0.2" max="6" step="0.1"/>
+        <small>Units per frame</small>
       </label>
-      <label>Dealer Rule
-        <select id="dealerRule">
-          <option value="S17" selected>Stand on soft 17</option>
-          <option value="H17">Hit soft 17</option>
+      <label>Max Force
+        <input id="maxForce" type="number" value="0.05" min="0.01" max="0.5" step="0.01"/>
+        <small>Steering clamp</small>
+      </label>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <label>Alignment
+        <input id="wAlign" type="number" value="1.0" min="0" max="3" step="0.1"/>
+        <small>Match heading</small>
+      </label>
+      <label>Cohesion
+        <input id="wCoh" type="number" value="0.8" min="0" max="3" step="0.1"/>
+        <small>Move toward neighbors</small>
+      </label>
+    </div>
+    <div class="grid" style="margin-top:8px">
+      <label>Separation
+        <input id="wSep" type="number" value="1.2" min="0" max="3" step="0.1"/>
+        <small>Avoid crowding</small>
+      </label>
+      <label>Edge Mode
+        <select id="edgeMode">
+          <option value="wrap" selected>Wrap</option>
+          <option value="bounce">Bounce</option>
         </select>
-        <small>Common casino rule toggle</small>
+        <small>World boundary behavior</small>
       </label>
     </div>
 
     <div class="row" style="margin-top:10px;">
-      <button id="simulate" class="btn" disabled>▶️ Run Simulation</button>
-      <button id="download" class="btn ghost" disabled>Download PNG</button>
+      <button id="run" class="btn" disabled>▶️ Start Swarm</button>
+      <button id="stop" class="btn secondary" disabled>Stop</button>
+      <button id="snapshot" class="btn ghost" disabled>Snapshot PNG</button>
     </div>
 
     <h2>Workers</h2>
@@ -95,13 +113,8 @@
   </div>
 
   <div class="card">
-    <h1>📈 EV Heatmap (Hard Totals)</h1>
-    <canvas id="canvas" width="800" height="640"></canvas>
-    <div class="row" style="margin-top:8px">
-      <span class="pill ok">Green = +EV</span>
-      <span class="pill bad">Red = −EV</span>
-      <span class="pill">Label shows EV / hand</span>
-    </div>
+    <h1>🫧 Flock</h1>
+    <canvas id="canvas" width="1024" height="768"></canvas>
     <h2>Activity</h2>
     <pre id="log" class="log mono"></pre>
   </div>
@@ -115,8 +128,8 @@ const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
 let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 (() => { const u = new URL(location.href); const override = u.searchParams.get("signal"); if (override) SIGNAL_URL = override; })();
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
-const MAX_INFLIGHT_PER_WORKER = 6;
-const JOB_TIMEOUT_MS = 12000;
+const MAX_INFLIGHT_PER_WORKER = 2;      // per-frame slices per worker
+const JOB_TIMEOUT_MS = 8000;
 
 /***** DOM helpers *****/
 const $ = s => document.querySelector(s);
@@ -130,9 +143,27 @@ function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent 
 const peerId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
 let roomId = null, isCoord = false;
 let sig = null; // WebSocket
-let renderState = { inProgress:false, jobsTotal:0, jobsDone:0, startTime:0 };
+
 const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
 let CANVAS_W = canvas.width, CANVAS_H = canvas.height;
+
+// Swarm state (coordinator only)
+let N = 0;
+let pos = null; // Float32Array length 2N: [x0,y0,x1,y1,...]
+let vel = null; // Float32Array length 2N
+let running = false;
+let frameId = 0;
+
+const params = () => ({
+  perception: parseFloat($("#perception").value),
+  maxSpeed:   parseFloat($("#maxSpeed").value),
+  maxForce:   parseFloat($("#maxForce").value),
+  wAlign:     parseFloat($("#wAlign").value),
+  wCoh:       parseFloat($("#wCoh").value),
+  wSep:       parseFloat($("#wSep").value),
+  edgeMode:   $("#edgeMode").value,
+  width: CANVAS_W, height: CANVAS_H
+});
 
 /***** Workers UI *****/
 const workers = new Map(); // peerId -> Peer
@@ -145,7 +176,7 @@ function refreshWorkersUI(){
       <div class="mono">${p.id.slice(0,8)} <span class="muted caps">${p.wsOnly? 'ws-only' : p.state}</span></div>
       <div class="pill ${p.rtt<80?'ok':p.rtt<200?'warn':'bad'}" title="RTT">${p.rtt? p.rtt+"ms":"—"}</div>
       <div class="pill" title="In flight">${p.inflight}</div>
-      <div class="pill" title="Jobs/sec">${p.tilesPerSec.toFixed(1)}</div>`;
+      <div class="pill" title="Slices/sec">${p.tilesPerSec.toFixed(1)}</div>`;
     host.appendChild(el);
   }
 }
@@ -173,9 +204,9 @@ async function onSignal(m){
 
   // Worker-only WS fallback jobs
   if (!isCoord && m.type === 'TASK_WS' && m.to === peerId){
-    if (m.kind === 'BJ_BATCH'){
-      const res = simulateBlackjackBatch(m.params);
-      sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'BJ_BATCH', result:res, state:m.params.state });
+    if (m.kind === 'BOIDS_STEP'){
+      const out = boidsStepWS(m.params);
+      sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'BOIDS_STEP', frameId:m.params.frameId, start:m.params.range.start, count:m.params.range.count, base64:out });
     }
     return;
   }
@@ -185,7 +216,7 @@ async function onSignal(m){
     if (m.type === 'PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
     if (m.type === 'ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
     if (m.type === 'ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
-    if (m.type === 'RESULT_WS' && m.from){ handleBJResultWS(m); return; }
+    if (m.type === 'RESULT_WS' && m.from){ handleBoidsWS(m); return; }
   } else {
     if (m.type === 'OFFER' && (m.to===peerId || !m.to)){
       if (!workerConn) { workerConn = new WorkerConn(); await workerConn.start(); }
@@ -212,18 +243,17 @@ class Peer{
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.onconnectionstatechange = () => {
       const s=this.pc.connectionState; this.state = s; refreshWorkersUI();
-      if (s==='connected'){ clearInterval(this.offerRetry); enableSimIfReady(); }
+      if (s==='connected'){ clearInterval(this.offerRetry); enableRunIfReady(); }
       if (s==='failed' || s==='closed' || s==='disconnected'){
         if (!this._everConnected){
           this.wsOnly = true;
-          log('RTC failed for', this.id, '→ WS fallback'); refreshWorkersUI(); enableSimIfReady();
+          log('RTC failed for', this.id, '→ WS fallback'); refreshWorkersUI(); enableRunIfReady();
         }
       }
     };
     this.pc.oniceconnectionstatechange = () => refreshWorkersUI();
     this.pc.onicecandidate = (e) => { if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
 
-    // Data channels
     this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
     this.data = this.pc.createDataChannel('data',{ordered:true});
     this.data.binaryType = 'arraybuffer';
@@ -240,7 +270,7 @@ class Peer{
   }
   async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected = true; }
   wireCtrl(){
-    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableSimIfReady(); };
+    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
       if (m.type==='PONG'){
@@ -256,11 +286,9 @@ class Peer{
     this.data.onmessage = (ev)=>{
       const meta = this.pendingMeta.shift();
       if (!meta){ log('WARN: data w/o meta from', this.id); return; }
-      if (meta.kind === 'BJ_BATCH'){
-        const dv = new DataView(ev.data);
-        const total = dv.getFloat64(0, true);
-        const count = dv.getFloat64(8, true);
-        onBJResult(meta.id, meta.state, { total, count }, this.id);
+      if (meta.kind === 'BOIDS_STEP'){
+        applyBoidsSlice(meta, ev.data); // merge into global arrays
+        onSliceDone(meta.id);
       }
       this.inflight = Math.max(0, this.inflight-1);
       this._recvTiles++;
@@ -276,46 +304,58 @@ class Peer{
     return (this.wsOnly) || (this.ctrl?.readyState==='open' && this.data?.readyState==='open'
       && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20));
   }
-  sendBJ(job){
+  sendSlice(job){ // job: {id, params, range}
     if (this.wsOnly){
-      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'BJ_BATCH', params:job.params });
+      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'BOIDS_STEP', params: job.params });
       this.inflight++; return true;
     }
     try{
-      this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'BJ_BATCH', params: job.params }));
+      // Send meta then binary payload (global pos/vel) for this frame
+      this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'BOIDS_STEP', frameId:job.params.frameId, range:job.params.range, par:job.params.par }));
+      this.data.send(job.params.binary); // transferable ArrayBuffer with packed pos+vel
       this.inflight++; return true;
-    }catch{ return false; }
+    }catch(e){ log('Send error', e?.message||e); return false; }
   }
 }
 function ensurePeer(id){
   let p = workers.get(id);
-  if (!p){ p = new Peer(id); workers.set(id,p); refreshWorkersUI(); enableSimIfReady(); }
+  if (!p){ p = new Peer(id); workers.set(id,p); refreshWorkersUI(); enableRunIfReady(); }
   return p;
 }
 
 /***** Worker side connection *****/
 let workerConn = null;
 class WorkerConn{
-  constructor(){ this.pc=null; this.ctrl=null; this.data=null; }
+  constructor(){ this.pc=null; this.ctrl=null; this.data=null; this._pendingTask=null; }
   async start(){
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-    this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } else if (e.channel.label==='data'){ this.data=e.channel; this.data.binaryType='arraybuffer'; } };
+    this.pc.ondatachannel = (e)=>{
+      if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); }
+      else if (e.channel.label==='data'){ this.data=e.channel; this.data.binaryType='arraybuffer'; this.wireData(); }
+    };
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
   }
   wireCtrl(){
-    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for jobs…'); };
+    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for slices…'); };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
       if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; }
-      if (m.type==='TASK' && m.kind==='BJ_BATCH'){
-        const res = simulateBlackjackBatch(m.params);
-        try{
-          this.ctrl.send(JSON.stringify({ type:'RESULT_META', id:m.id, kind:'BJ_BATCH', state:m.params.state }));
-          const buf = new ArrayBuffer(16); const dv = new DataView(buf);
-          dv.setFloat64(0, res.total, true); dv.setFloat64(8, res.count, true);
-          this.data?.send(buf);
-        }catch(e){ log('Send error', e?.message||e); }
+      if (m.type==='TASK' && m.kind==='BOIDS_STEP'){
+        // meta arrives here; binary with state will arrive on data channel
+        this._pendingTask = { id:m.id, frameId:m.frameId, range:m.range, par:m.par };
       }
+    };
+  }
+  wireData(){
+    this.data.onmessage = (ev)=>{
+      // got binary state for a pending slice → compute & return
+      const t = this._pendingTask; if (!t) return;
+      const outBuf = boidsStepBinary(ev.data, t.range, t.par);
+      try{
+        this.ctrl.send(JSON.stringify({ type:'RESULT_META', id:t.id, kind:'BOIDS_STEP', frameId:t.frameId, range:t.range }));
+        this.data?.send(outBuf);
+      }catch(e){ log('Send error', e?.message||e); }
+      this._pendingTask = null;
     };
   }
   async acceptOffer(offer, from){
@@ -325,26 +365,34 @@ class WorkerConn{
   }
 }
 
-/***** Scheduler (jobs) *****/
+/***** Scheduler (per-frame slice dispatcher) *****/
 let pendingJobs = [];
 const inFlightById = new Map();
+let slicesExpected = 0, slicesDone = 0;
 
-function planBJJobs(handsPerCell){
-  // Player hard totals 8..21 vs dealer upcard [2..11(Ace)]
+function planSlices(){
+  const peers = [...workers.values()].filter(p => p.canSend());
+  const k = Math.max(1, peers.length);
+  const per = Math.ceil(N / k);
   const jobs = [];
-  for (let pSum=8; pSum<=21; pSum++){
-    for (const dUp of [2,3,4,5,6,7,8,9,10,11]){
-      const state = { playerSum:pSum, playerSoft:false, dealerUp:dUp };
-      const params = {
-        seed: (Math.random()*1e9)|0,
-        hands: handsPerCell,
-        state,
-        policy: $("#policy").value,
-        hitBelow: parseInt($("#hitBelow").value,10),
-        dealerRule: $("#dealerRule").value
-      };
-      jobs.push({ id:`bj_${Math.random().toString(36).slice(2,8)}`, params });
-    }
+  let start = 0;
+  for (let i=0;i<k;i++){
+    const count = Math.min(per, N - start);
+    if (count<=0) break;
+    const id = `bo_${frameId}_${i}_${Math.random().toString(36).slice(2,6)}`;
+    // Pack global state into binary: [pos(2N), vel(2N)] Float32
+    const bin = packState(pos, vel);
+    const job = {
+      id,
+      params: {
+        frameId,
+        range: { start, count },
+        par: params(),
+        binary: bin // transferable
+      }
+    };
+    jobs.push(job);
+    start += count;
   }
   return jobs;
 }
@@ -361,7 +409,7 @@ function scheduleLoop(){
     }
     if (!best) break;
     const job = pendingJobs.shift();
-    const ok = best.sendBJ(job);
+    const ok = best.sendSlice(job);
     if (ok){
       inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() });
       made = true;
@@ -371,23 +419,24 @@ function scheduleLoop(){
   if (made) refreshWorkersUI();
 }
 
-function onBJResult(id, state, res, fromId){
-  renderState.jobsDone++;
-  inFlightById.delete(id);
-  accumulateEV(state, res);
-  drawHeatmap();
-  const pct=Math.round(100*renderState.jobsDone/renderState.jobsTotal);
-  const elapsed=((Date.now()-renderState.startTime)/1000).toFixed(1);
-  log(`Cell ${renderState.jobsDone}/${renderState.jobsTotal} (${pct}%) - ${elapsed}s (from ${String(fromId).slice(0,6)})`);
-  setStatus(`Simulating: ${pct}%`);
-  if (renderState.jobsDone>=renderState.jobsTotal){
-    renderState.inProgress=false;
-    $("#simulate").disabled=false; $("#download").disabled=true; // download after redraw for better labels
-    const total=((Date.now()-renderState.startTime)/1000).toFixed(1);
-    setStatus(`Simulation complete ✓ (${total}s)`);
-    $("#download").disabled=false;
-  }
+function startFrame(){
+  if (!running || !workers.size) return;
+  slicesDone = 0;
+  const jobs = planSlices();
+  slicesExpected = jobs.length;
+  pendingJobs = jobs;
   scheduleLoop();
+}
+
+function onSliceDone(id){
+  const rec = inFlightById.get(id);
+  if (rec) inFlightById.delete(id);
+  slicesDone++;
+  if (slicesDone >= slicesExpected){
+    drawBoids();
+    frameId++;
+    startFrame(); // next frame
+  }
 }
 
 // Requeue stale jobs
@@ -395,145 +444,177 @@ setInterval(()=>{
   const now = Date.now();
   for (const [id, rec] of [...inFlightById]){
     if (now - rec.ts > JOB_TIMEOUT_MS){
+      const { job } = rec;
       log('Timeout → requeue', id);
-      pendingJobs.push({ id:`re_${Math.random().toString(36).slice(2,8)}`, params: rec.job.params });
+      // resubmit same slice for current frame only if frame still current
+      if (job.params.frameId === frameId){
+        pendingJobs.push({ id:`re_${Math.random().toString(36).slice(2,8)}`, params: job.params });
+      }
       inFlightById.delete(id);
       const p = workers.get(rec.peer); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
     }
   }
   if (pendingJobs.length) scheduleLoop();
-}, 1000);
+}, 500);
 
-/***** EV aggregation + drawing *****/
-const aggEV = new Map(); // key "sum_soft_dealer" -> {total,count}
-function keyFor(state){ return `${state.playerSum}_${state.playerSoft?1:0}_${state.dealerUp}`; }
-function accumulateEV(state, res){
-  const k = keyFor(state);
-  const prev = aggEV.get(k) || { total:0, count:0 };
-  aggEV.set(k, { total: prev.total + res.total, count: prev.count + res.count });
+/***** Merge results (coord) *****/
+function applyBoidsSlice(meta, buf){
+  if (meta.frameId !== frameId) return; // stale
+  const { start, count } = meta.range;
+  const f32 = new Float32Array(buf);
+  const len = count*2;
+  pos.set(f32.subarray(0, len), start*2);
+  vel.set(f32.subarray(len, len*2), start*2);
 }
-function drawHeatmap(){
-  const cols = 10; // dealer 2..A
-  const rows = 14; // player 8..21
-  const cellW = Math.floor(CANVAS_W / cols), cellH = Math.floor(CANVAS_H / rows);
-  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
-  // axes labels
-  ctx.fillStyle="#a7a7b3"; ctx.font="12px ui-monospace";
-  for (let i=0;i<cols;i++){ const label = (i<8)? String(i+2) : (i===8? "10" : "A"); ctx.fillText(label, i*cellW + cellW/2 - 6, 14); }
-  for (let r=0;r<rows;r++){ ctx.fillText(String(8+r), 4, r*cellH + 14); }
 
-  for (let r=0, pSum=8; r<rows; r++, pSum++){
-    for (let c=0, dUp=2; c<cols; c++, dUp = (c<8? 2+c : (c===8?10:11))){
-      const k = `${pSum}_0_${dUp}`;
-      const rec = aggEV.get(k);
-      let ev = 0, seen=false;
-      if (rec && rec.count>0){ ev = rec.total / rec.count; seen=true; }
-      // color map EV in [-0.5, +0.5]
-      const t = Math.max(-0.5, Math.min(0.5, ev));
-      const g = Math.floor((t+0.5) * 255);
-      const rr = 255 - g;
-      ctx.fillStyle = seen? `rgb(${rr},${g},40)` : "#0c0c14";
-      ctx.fillRect(c*cellW+1, r*cellH+1, cellW-2, cellH-2);
-      if (seen){
-        ctx.fillStyle="#fff"; ctx.font="12px ui-monospace";
-        ctx.fillText(ev.toFixed(2), c*cellW + 6, r*cellH + 16);
+/***** WS fallback encode/decode *****/
+function bytesToBase64(bytes){
+  let binary=""; const CHUNK=0x8000;
+  for(let i=0;i<bytes.length;i+=CHUNK){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length)));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(b64){ const bin=atob(b64); const len=bin.length; const out=new Uint8Array(len); for(let i=0;i<len;i++) out[i]=bin.charCodeAt(i); return out; }
+function handleBoidsWS(m){
+  if (m.frameId !== frameId) return;
+  const bytes = base64ToBytes(m.base64).buffer;
+  applyBoidsSlice({ frameId:m.frameId, range:{start:m.start,count:m.count} }, bytes);
+  onSliceDone(m.id);
+  const p = workers.get(m.from); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
+}
+
+/***** Binary packing (coord & worker) *****/
+function packState(p, v){
+  const buf = new ArrayBuffer((p.length + v.length) * 4);
+  const f = new Float32Array(buf);
+  f.set(p, 0);
+  f.set(v, p.length);
+  return buf;
+}
+
+/***** Boids physics (worker) *****/
+function boidsStepBinary(buf, range, par){
+  const f = new Float32Array(buf);
+  const n2 = f.length/2;
+  const Nloc = n2/2; // positions length /2 = N
+  const P = f.subarray(0, n2);
+  const V = f.subarray(n2);
+
+  const out = new Float32Array(range.count*4); // pos(count*2), vel(count*2)
+  const pr = par.perception, maxSpeed = par.maxSpeed, maxForce = par.maxForce;
+  const wA = par.wAlign, wC = par.wCoh, wS = par.wSep;
+
+  for (let idx=0; idx<range.count; idx++){
+    const i = range.start + idx;
+    const ix = P[i*2], iy = P[i*2+1];
+    const ivx = V[i*2], ivy = V[i*2+1];
+
+    let steerAx=0, steerAy=0, steerCx=0, steerCy=0, steerSx=0, steerSy=0;
+    let count=0, countS=0;
+
+    for (let j=0;j<Nloc;j++){
+      if (j===i) continue;
+      const jx=P[j*2], jy=P[j*2+1];
+      let dx = jx-ix, dy = jy-iy;
+      // toroidal wrap distance (wrap mode best-effort)
+      const wx = par.width, wy = par.height;
+      if (par.edgeMode==='wrap'){
+        if (dx >  wx/2) dx -= wx; else if (dx < -wx/2) dx += wx;
+        if (dy >  wy/2) dy -= wy; else if (dy < -wy/2) dy += wy;
+      }
+      const d2 = dx*dx + dy*dy;
+      if (d2 < pr*pr){
+        count++;
+        // alignment: sum neighbor velocities
+        steerAx += V[j*2]; steerAy += V[j*2+1];
+        // cohesion: sum neighbor positions
+        steerCx += jx; steerCy += jy;
+        // separation: away from close neighbors (stronger within half radius)
+        const d = Math.max(1e-4, Math.sqrt(d2));
+        const push = (pr/Math.max(d,1)) - 0.5;
+        if (push>0){ steerSx -= dx/d * push; steerSy -= dy/d * push; countS++; }
       }
     }
-  }
-}
 
-/***** WS result handler (fallback) *****/
-function handleBJResultWS(m){
-  onBJResult(m.id, m.state, m.result, m.from);
-  const p = workers.get(m.from);
-  if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
-}
+    // combine
+    let ax=0, ay=0;
+    if (count>0){
+      // alignment
+      let avx = (steerAx / count), avy = (steerAy / count);
+      [avx,avy] = limitVec(avx,avy,maxSpeed);
+      avx -= ivx; avy -= ivy;
+      [avx,avy] = limitVec(avx,avy,maxForce);
+      ax += wA*avx; ay += wA*avy;
 
-/***** Blackjack simulation core (worker + coord share) *****/
-function xorshift32(seed){ let x = seed|0; return ()=>{ x^=x<<13; x^=x>>>17; x^=x<<5; return (x>>>0)/4294967296; }; }
-function drawCard(rng){
-  const v = Math.floor(rng()*13)+1;
-  if (v===1) return 11;           // Ace
-  if (v>=10) return 10;           // 10,J,Q,K
-  return v;                       // 2..9
-}
-function handValue(cards){
-  let sum = cards.reduce((a,b)=>a+b,0);
-  let aces = 0; for (const c of cards) if (c===11) aces++;
-  while (sum>21 && aces>0){ sum -= 10; aces--; }
-  const soft = (aces>0) && (sum<=21);
-  return {sum, soft};
-}
-function basicDecision(player, dealerUp){
-  const {sum, soft} = handValue(player);
-  if (player.length===2 && !soft && sum>=9 && sum<=11 && dealerUp!==11) return "double";
-  if (soft){
-    if (sum<=17) return "hit";
-    if (sum===18) return (dealerUp>=9 || dealerUp===11) ? "hit" : "stand";
-    return "stand";
-  } else {
-    if (sum<=11) return "hit";
-    if (sum===12) return (dealerUp>=4 && dealerUp<=6) ? "stand" : "hit";
-    if (sum>=13 && sum<=16) return (dealerUp>=2 && dealerUp<=6) ? "stand" : "hit";
-    return "stand";
-  }
-}
-function playDealer(rng, up, dealerRule){ // S17/H17
-  const hand = [up, drawCard(rng)];
-  while (true){
-    const {sum, soft} = handValue(hand);
-    if (sum>21) return hand;
-    if (sum>17) return hand;
-    if (sum===17){
-      if (soft && dealerRule==="H17"){ hand.push(drawCard(rng)); continue; }
-      if (!soft || dealerRule==="S17") return hand;
+      // cohesion
+      let cx = (steerCx / count) - ix, cy = (steerCy / count) - iy;
+      [cx,cy] = limitVec(cx,cy,maxSpeed);
+      cx -= ivx; cy -= ivy;
+      [cx,cy] = limitVec(cx,cy,maxForce);
+      ax += wC*cx; ay += wC*cy;
     }
-    hand.push(drawCard(rng));
-  }
-}
-function resolveOutcome(player, dealer){
-  const pv = handValue(player).sum, dv = handValue(dealer).sum;
-  if (pv>21) return -1;
-  if (dv>21) return +1;
-  if (pv>dv) return +1;
-  if (pv<dv) return -1;
-  return 0;
-}
-function simulateOneHand(rng, params){
-  const dealerUp = params.state.dealerUp;
-  const dealerRule = params.dealerRule || "S17";
-  // deal random player starting hand; this is a “policy EV” sim, not strictly conditioned on exact total
-  let player = [drawCard(rng), drawCard(rng)];
-  // naturals
-  const p0 = handValue(player).sum, d0 = handValue([dealerUp, drawCard(rng)]).sum;
-  if (p0===21){ if (d0===21) return 0; return 1.5; } // 3:2
-  if (d0===21) return -1;
+    if (countS>0){
+      let sx = steerSx / countS, sy = steerSy / countS;
+      [sx,sy] = limitVec(sx,sy,maxSpeed);
+      sx -= ivx; sy -= ivy;
+      [sx,sy] = limitVec(sx,sy,maxForce);
+      ax += wS*sx; ay += wS*sy;
+    }
 
-  // player turn via chosen policy
-  let doubled=false;
-  while (true){
-    const {sum} = handValue(player);
-    if (sum>=21) break;
-    let action = params.policy==="hitStandFixed"
-      ? (sum < (params.hitBelow||17) ? "hit" : "stand")
-      : basicDecision(player, dealerUp);
-    if (action==="double" && player.length===2){ doubled=true; player.push(drawCard(rng)); break; }
-    if (action==="stand") break;
-    player.push(drawCard(rng));
+    // integrate
+    let nvx = ivx + ax, nvy = ivy + ay;
+    [nvx,nvy] = limitVec(nvx,nvy,maxSpeed);
+    let nx = ix + nvx, ny = iy + nvy;
+
+    // edges
+    if (par.edgeMode==='wrap'){
+      if (nx<0) nx+=par.width; if (nx>=par.width) nx-=par.width;
+      if (ny<0) ny+=par.height; if (ny>=par.height) ny-=par.height;
+    } else {
+      if (nx<0 || nx>=par.width){ nvx = -nvx; nx = Math.min(Math.max(nx,0),par.width-1); }
+      if (ny<0 || ny>=par.height){ nvy = -nvy; ny = Math.min(Math.max(ny,0),par.height-1); }
+    }
+
+    // write slice
+    out[idx*2] = nx; out[idx*2+1] = ny;
+    out[range.count*2 + idx*2] = nvx; out[range.count*2 + idx*2 +1] = nvy;
   }
-  const dealer = playDealer(rng, dealerUp, dealerRule);
-  const delta = resolveOutcome(player, dealer);
-  return doubled ? delta*2 : delta;
+
+  return out.buffer;
 }
-// Batch for a given state
-function simulateBlackjackBatch(params){
-  const rng = xorshift32(params.seed|0);
-  let total=0, count=0;
-  for (let i=0;i<params.hands;i++){
-    total += simulateOneHand(rng, params);
-    count++;
+function limitVec(x,y,max){
+  const m2 = x*x+y*y; if (m2>max*max){ const s = max/Math.sqrt(m2); return [x*s,y*s]; }
+  return [x,y];
+}
+
+// WS version (meta + base64 binary in/out)
+function boidsStepWS(p){
+  const out = boidsStepBinary(packState(p.P, p.V), p.range, p.par);
+  return bytesToBase64(new Uint8Array(out));
+}
+
+/***** Rendering (coord) *****/
+function drawBoids(){
+  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+  ctx.fillStyle = "#eaeaf2";
+  for (let i=0;i<N;i++){
+    const x = pos[i*2], y = pos[i*2+1];
+    const vx = vel[i*2], vy = vel[i*2+1];
+    const ang = Math.atan2(vy,vx);
+    // tiny triangle
+    const size = 4;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.moveTo(size,0);
+    ctx.lineTo(-size, size*0.6);
+    ctx.lineTo(-size, -size*0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
-  return { total, count };
 }
 
 /***** UI *****/
@@ -545,7 +626,7 @@ $("#start").onclick = async () => {
     const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
     $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my session",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
+    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my swarm",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#qr").onclick = () => showQR(url);
     $("#open").onclick = () => { const w = window.open('about:blank'); if (w) w.location.href = url; };
     $("#open").disabled = false;
@@ -553,36 +634,46 @@ $("#start").onclick = async () => {
     setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url, peerId });
     setStatus("Room created. Waiting for workers to join…");
   } catch (e) {
-    setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
+    setStatus("Failed to start: " + (e?.message||e));
+    $("#start").disabled=false;
   }
 };
 
-$("#simulate").onclick = () => {
+$("#run").onclick = () => {
   if (!workers.size){ setStatus("No workers connected"); return; }
-  // reset aggregation & canvas
-  aggEV.clear(); ctx.fillStyle="#0c0c14"; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
-
-  const handsPerCell = parseInt($("#hands").value,10);
-  const jobs = planBJJobs(handsPerCell);
-  renderState = { inProgress:true, jobsTotal:jobs.length, jobsDone:0, startTime:Date.now() };
-  setStatus(`Simulating: ${jobs.length} cells × ${handsPerCell} hands…`);
-  $("#simulate").disabled=true; $("#download").disabled=true;
-  pendingJobs = jobs;
-  scheduleLoop();
+  N = parseInt($("#numBoids").value,10);
+  pos = new Float32Array(N*2);
+  vel = new Float32Array(N*2);
+  for (let i=0;i<N;i++){
+    pos[i*2] = Math.random()*CANVAS_W; pos[i*2+1] = Math.random()*CANVAS_H;
+    const a = Math.random()*Math.PI*2, s = 1 + Math.random()*0.5;
+    vel[i*2] = Math.cos(a)*s; vel[i*2+1] = Math.sin(a)*s;
+  }
+  running = true; frameId = 0;
+  $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false;
+  setStatus(`Swarm running with ${N} boids across ${workers.size} workers…`);
+  startFrame();
 };
 
-$("#download").onclick = () => {
+$("#stop").onclick = () => {
+  running = false;
+  pendingJobs.length = 0;
+  setStatus("Swarm paused.");
+  $("#run").disabled=false; $("#stop").disabled=true;
+};
+
+$("#snapshot").onclick = () => {
   const a = document.createElement('a');
-  a.download = `blackjack_ev_${CANVAS_W}x${CANVAS_H}.png`;
+  a.download = `boids_${CANVAS_W}x${CANVAS_H}.png`;
   a.href = canvas.toDataURL('image/png');
   a.click();
 };
 
-function enableSimIfReady(){
+function enableRunIfReady(){
   if (!isCoord) return;
   const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
-  $("#simulate").disabled = !anyUsable;
-  if (anyUsable) setStatus('Ready. Tune controls and hit ▶️ Run Simulation.');
+  $("#run").disabled = !anyUsable;
+  if (anyUsable) setStatus('Ready. Tune controls and hit ▶️ Start Swarm.');
 }
 
 /***** QR *****/
@@ -602,8 +693,8 @@ function showQR(data){
 
 /***** Auto-join as worker *****/
 (async ()=>{
-  const params = new URLSearchParams(location.hash.slice(1));
-  const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
+  const paramsURL = new URLSearchParams(location.hash.slice(1));
+  const rid = paramsURL.get('room'); const role = paramsURL.get('role'); if (!rid) return;
   roomId = rid; isCoord = (role !== 'worker');
   setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
   try {
@@ -611,10 +702,10 @@ function showQR(data){
     if (!isCoord){
       workerConn = new WorkerConn(); await workerConn.start();
       setDebug({ SIGNAL_URL, roomId, role:'worker', peerId });
-      $("#start").disabled=true; $("#simulate").disabled=true;
+      $("#start").disabled=true; $("#run").disabled=true;
     } else {
       setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
-      enableSimIfReady();
+      enableRunIfReady();
     }
   } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
 })();
