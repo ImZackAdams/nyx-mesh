@@ -3,105 +3,116 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • P2P GA Optimizer (Distributed TSP)</title>
+<title>NyxMesh • Browser Mesh Optimizer (Investor Demo)</title>
 <style>
-  :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d}
-  *{box-sizing:border-box} html,body{height:100%}
-  body{margin:0;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 10% 0%,#141421 0%,var(--bg) 60%);color:var(--ink);display:flex;justify-content:center;padding:18px}
-  .wrap{width:100%;max-width:1200px;display:grid;grid-template-columns:380px 1fr;gap:14px}
-  .card{background:var(--panel);border:1px solid #222231;border-radius:14px;padding:14px}
-  h1{margin:0 0 8px;font-size:18px} h2{margin:12px 0 10px;font-size:15px;color:var(--muted)}
+  :root{
+    --bg:#0b0b0f;--panel:#12121a;--ink:#eaeaf2;--muted:#9aa0ad;--accent:#9b5cff;--accent-2:#00e5a8;
+    --accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d;--line:#232334;--chip:#1a1a24;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(1200px 600px at 10% 0%,#141421 0%,var(--bg) 60%);color:var(--ink);
+    display:flex;justify-content:center;padding:18px
+  }
+  .wrap{width:100%;max-width:1200px;display:grid;grid-template-columns:420px 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  h1{margin:0 0 8px;font-size:18px}
+  h2{margin:12px 0 10px;font-size:15px;color:var(--muted)}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .btn{background:var(--accent);color:#0b0b0f;border:0;padding:8px 12px;border-radius:10px;font-weight:700;cursor:pointer;transition:.2s}
+  .btn{background:var(--accent);color:#0b0b0f;border:0;padding:9px 12px;border-radius:10px;font-weight:700;cursor:pointer;transition:.2s}
   .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .btn.secondary{background:#2a2a38;color:var(--ink);border:1px solid #333349}
+  .btn.secondary{background:#27273a;color:var(--ink);border:1px solid #333349}
   .btn.ghost{background:transparent;border:1px dashed #333349;color:var(--muted)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  input,select{width:100%;background:#0f0f16;color:#0ef;border:1px solid #282838;border-radius:8px;padding:10px}
+  input,select{width:100%;background:#0f0f16;color:#bfe3ff;border:1px solid #282838;border-radius:8px;padding:10px}
   .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .kpi{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px}
+  .kpi h3{margin:0;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .kpi .v{font-size:20px;font-weight:800;margin-top:4px}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#24243a;color:var(--ink);font-size:12px}
   .ok{background:#1d3d23;color:var(--good)}.warn{background:#3d3d1d;color:var(--warn)}.bad{background:#3d1d1d;color:var(--bad)}
-  .log{height:200px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
   .status{margin-top:10px;padding:8px;border-radius:8px;background:#1a1a24;border:1px solid #2a2a3a;font-size:13px}
-  canvas{width:100%;height:auto;background:#0c0c14;border:1px solid #242436;border-radius:10px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .workers{margin-top:6px;display:flex;flex-direction:column;gap:6px}
   .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #2b2b3a;border-radius:10px;background:#12121a}
   .muted{color:var(--muted)}
-  @media (max-width: 860px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
+  .pitch{background:linear-gradient(90deg, rgba(155,92,255,.12), rgba(0,229,168,.12));border:1px solid #2b2b3a;border-radius:12px;padding:10px;margin-top:8px}
+  .small{font-size:12px;color:var(--muted)}
+  .log{height:160px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
+  canvas{width:100%;height:auto;background:#0b0b12;border:1px solid #242436;border-radius:10px}
+  @media (max-width: 920px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🧬 NyxMesh GA (Distributed TSP)</h1>
+    <h1>🧬 NyxMesh — Browser Mesh Optimizer</h1>
     <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
-    <div class="kv"><span>Workers</span><span id="workerCount" class="pill">0</span></div>
-    <div class="kv"><span>Epoch</span><span id="epoch" class="pill">0</span></div>
+    <div class="kpis">
+      <div class="kpi"><h3>Active Peers</h3><div id="kPeers" class="v">0</div></div>
+      <div class="kpi"><h3>Global Epochs / sec</h3><div id="kThroughput" class="v">0.0</div></div>
+      <div class="kpi"><h3>Best Route (px)</h3><div id="kBest" class="v">—</div></div>
+      <div class="kpi"><h3>Speedup vs 1 Worker</h3><div id="kSpeedup" class="v">1.0×</div></div>
+      <div class="kpi"><h3>Est. $ Saved*</h3><div id="kDollars" class="v">$0.00</div></div>
+    </div>
+    <div class="small">*Back-of-envelope vs cloud CPU at $0.000011/epoch (configurable).</div>
+
+    <div class="pitch">
+      <b>What you’re seeing:</b> every open browser becomes a compute node. We run a genetic algorithm for routing (TSP). More peers ⇒ more parallel epochs ⇒ shorter routes faster — no installs, no cloud.
+    </div>
 
     <h2>Session</h2>
-    <div class="row"><button id="start" class="btn">Start Session</button></div>
+    <div class="row"><button id="start" class="btn">Start Coordinator</button></div>
     <div class="row" style="margin-top:8px">
       <input id="invite" class="mono" placeholder="Invite link appears here" readonly />
       <button id="copy" class="btn secondary" title="Copy link">Copy</button>
       <button id="share" class="btn secondary" title="Share link">Share</button>
       <button id="qr" class="btn secondary" title="Show QR">QR</button>
-      <button id="open" class="btn secondary" title="Open worker tab" disabled>Open worker</button>
+      <button id="open" class="btn secondary" title="Open worker tab" disabled>Open Worker</button>
     </div>
-    <div class="status" id="status">Create a session and send the link to workers.</div>
+    <div class="status" id="status">Click “Start Coordinator”, then recruit peers.</div>
 
     <h2>GA Controls</h2>
-    <div class="grid">
-      <label>Cities
-        <input id="cities" type="number" value="40" min="8" max="120"/>
-        <small>Problem size</small>
-      </label>
-      <label>Pop / Worker
-        <input id="pop" type="number" value="150" min="20" step="10"/>
-        <small>Local population</small>
-      </label>
+    <div class="row" style="gap:10px">
+      <label style="flex:1">Cities<input id="cities" type="number" value="40" min="8" max="200"/></label>
+      <label style="flex:1">Pop/Worker<input id="pop" type="number" value="150" min="20" step="10"/></label>
     </div>
-    <div class="grid" style="margin-top:8px">
-      <label>Gen / Epoch
-        <input id="gens" type="number" value="80" min="10" step="10"/>
-        <small>Worker generations per epoch</small>
-      </label>
-      <label>Mutation %
-        <input id="mut" type="number" value="8" min="0" max="50"/>
-        <small>Swap mutate chance</small>
-      </label>
+    <div class="row" style="gap:10px;margin-top:8px">
+      <label style="flex:1">Gen/Epoch<input id="gens" type="number" value="80" min="10"/></label>
+      <label style="flex:1">Mutation %<input id="mut" type="number" value="8" min="0" max="50"/></label>
+      <label style="flex:1">Elites<input id="elites" type="number" value="5" min="1" max="20"/></label>
     </div>
-    <div class="grid" style="margin-top:8px">
-      <label>Elites / Worker
-        <input id="elites" type="number" value="5" min="1" max="20"/>
-        <small>Migrate these up</small>
-      </label>
-      <label>Reset Cities
-        <select id="reset">
-          <option value="no" selected>No</option>
-          <option value="yes">Yes</option>
-        </select>
-        <small>Regenerate instances</small>
-      </label>
-    </div>
-
     <div class="row" style="margin-top:10px;">
-      <button id="run" class="btn" disabled>▶️ Start</button>
+      <button id="run" class="btn" disabled>▶️ Start Optimization</button>
       <button id="stop" class="btn secondary" disabled>Stop</button>
       <button id="snapshot" class="btn ghost" disabled>Snapshot</button>
     </div>
 
+    <h2>Investor Toggles</h2>
+    <div class="row" style="gap:10px">
+      <label style="flex:1">Reset Cities<select id="reset"><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
+      <label style="flex:1">Cloud $/epoch<input id="unitCost" type="number" value="0.000011" step="0.000001"/></label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="baseline" class="btn secondary">⏱️ 30s Local Baseline</button>
+      <button id="export" class="btn ghost" disabled>Export CSV</button>
+    </div>
+
     <h2>Workers</h2>
     <div id="workers" class="workers"></div>
-
-    <h2>Debug</h2>
-    <textarea id="debug" rows="5" class="mono" readonly></textarea>
   </div>
 
   <div class="card">
     <h1>🗺️ Best Tour <span id="bestLen" class="pill">—</span></h1>
-    <canvas id="canvas" width="1024" height="768"></canvas>
+    <canvas id="canvas" width="1024" height="640"></canvas>
+
+    <h2>Progress</h2>
+    <canvas id="chart" width="1024" height="120"></canvas>
+    <div class="small" style="margin:6px 0 10px">Best distance vs time (lower is better). </div>
+
     <h2>Activity</h2>
     <pre id="log" class="log mono"></pre>
   </div>
@@ -122,7 +133,6 @@ const EPOCH_TIMEOUT_MS = 15000;
 const $ = s => document.querySelector(s);
 function pill(el, text, cls){ el.textContent = text; el.className = "pill " + (cls||""); }
 function setStatus(msg){ $("#status").textContent = msg; }
-function setDebug(o){ $("#debug").value = JSON.stringify(o, null, 2); }
 const logEl = $("#log");
 function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${a.join(" ")}\n`; logEl.scrollTop = logEl.scrollHeight; }
 
@@ -130,13 +140,28 @@ function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent 
 const peerId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
 let roomId = null, isCoord = false;
 let sig = null; // WebSocket
-
-const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
+const canvas = $("#canvas"), ctx = canvas.getContext("2d");
+const chart = $("#chart"), cctx = chart.getContext("2d");
 let CANVAS_W = canvas.width, CANVAS_H = canvas.height;
 
 const workers = new Map(); // id -> Peer
+let CITY = [];      // [{x,y}]
+let BEST = { route:null, len:Infinity };
+let running=false, epochNo=0;
+
+let metrics = {
+  startTs: 0,
+  bestSeries: [], // [ {t,len} ]
+  epochsCompleted: 0,
+  epochWindow: [],
+  lastThroughputTs: 0,
+  localBaselineEPS: null // epochs/sec (single worker baseline)
+};
+
+/***** UI sync helpers *****/
 function refreshWorkersUI(){
-  $("#workerCount").textContent = String(workers.size);
+  $("#kPeers").textContent = String(workers.size);
+  $("#workerCount") && ($("#workerCount").textContent = String(workers.size));
   const host = $("#workers"); host.innerHTML = "";
   for (const p of workers.values()){
     const el = document.createElement('div'); el.className = 'worker'; el.id = `w-${p.id}`;
@@ -148,27 +173,56 @@ function refreshWorkersUI(){
     host.appendChild(el);
   }
 }
-
-/***** TSP instance + best tracking (coordinator) *****/
-let CITY = [];      // [{x,y},...]
-let BEST = { route:null, len:Infinity };
-let running=false, epochNo=0;
-function genCities(n){
-  CITY = Array.from({length:n}, ()=>({x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05, y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1}));
-}
-function draw(){
+function drawCitiesAndBest(){
   ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
-  // cities
   ctx.fillStyle="#eaeaf2"; for (const c of CITY){ ctx.beginPath(); ctx.arc(c.x,c.y,3,0,Math.PI*2); ctx.fill(); }
-  // best path
   if (BEST.route){
     ctx.strokeStyle="#9b5cff"; ctx.lineWidth=2; ctx.beginPath();
     let i0 = BEST.route[0]; ctx.moveTo(CITY[i0].x, CITY[i0].y);
     for (let i=1;i<BEST.route.length;i++){ const ci = CITY[BEST.route[i]]; ctx.lineTo(ci.x,ci.y); }
-    ctx.lineTo(CITY[i0].x, CITY[i0].y);
-    ctx.stroke();
+    ctx.lineTo(CITY[i0].x, CITY[i0].y); ctx.stroke();
   }
   $("#bestLen").textContent = (BEST.len<Infinity? BEST.len.toFixed(1) : "—");
+  $("#kBest").textContent = $("#bestLen").textContent;
+}
+function drawChart(){
+  const W=chart.width, H=chart.height;
+  cctx.clearRect(0,0,W,H);
+  cctx.fillStyle="#16161d"; cctx.fillRect(0,0,W,H);
+  if (metrics.bestSeries.length<2){ cctx.fillStyle="#9aa0ad"; cctx.fillText("…", 6, 14); return; }
+  const t0 = metrics.bestSeries[0].t, t1 = metrics.bestSeries.at(-1).t;
+  const min = Math.min(...metrics.bestSeries.map(d=>d.len));
+  const max = Math.max(...metrics.bestSeries.map(d=>d.len));
+  const xFor = t => (t - t0) / (t1 - t0 + 1) * (W-20) + 10;
+  const yFor = v => H-10 - (v - min) / (max - min + 1e-9) * (H-20);
+  cctx.strokeStyle="#00e5a8"; cctx.lineWidth=2; cctx.beginPath();
+  metrics.bestSeries.forEach((d,i)=>{ if (i===0) cctx.moveTo(xFor(d.t), yFor(d.len)); else cctx.lineTo(xFor(d.t), yFor(d.len)); });
+  cctx.stroke();
+  cctx.fillStyle="#9aa0ad"; cctx.font="11px ui-monospace";
+  cctx.fillText(`${min.toFixed(1)} px`, 8, yFor(min)-4);
+  cctx.fillText(`${max.toFixed(1)} px`, 8, yFor(max)+12);
+}
+
+/***** KPI updates *****/
+function updateThroughput(){
+  const now = performance.now();
+  metrics.epochWindow = metrics.epochWindow.filter(ts => now - ts < 2000); // last 2s
+  const eps = metrics.epochWindow.length / 2;
+  $("#kThroughput").textContent = eps.toFixed(1);
+  // speedup if baseline known
+  if (metrics.localBaselineEPS){
+    const speed = eps / metrics.localBaselineEPS;
+    $("#kSpeedup").textContent = `${Math.max(1, speed).toFixed(1)}×`;
+  }
+  // crude $ saved (vs cloud unit cost)
+  const unit = parseFloat($("#unitCost").value || "0.000011");
+  const dollars = metrics.epochsCompleted * unit;
+  $("#kDollars").textContent = `$${dollars.toFixed(2)}`;
+}
+
+/***** Cities *****/
+function genCities(n){
+  CITY = Array.from({length:n}, ()=>({x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05, y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1}));
 }
 
 /***** Signaling *****/
@@ -188,17 +242,13 @@ function openSignaling(id){
     sig.onclose = () => { pill($("#sigState"), "closed", "bad"); };
   });
 }
-
 async function onSignal(m){
   if (m.room && m.room !== roomId) return;
-
-  // WS fallback for worker epochs
   if (!isCoord && m.type==='TASK_WS' && m.to===peerId && m.kind==='GA_EPOCH'){
     const out = runEpochLocal(m.params);
     sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'GA_EPOCH', result: out });
     return;
   }
-
   if (isCoord){
     if (m.type==='HELLO' && m.from && m.from!==peerId){ ensurePeer(m.from).maybeConnect(); return; }
     if (m.type==='PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
@@ -218,7 +268,7 @@ async function onSignal(m){
   }
 }
 
-/***** Peer wrapper (coordinator side) *****/
+/***** Peer (coordinator) *****/
 class Peer{
   constructor(id){
     this.id=id; this.pc=null; this.ctrl=null; this.state='idle';
@@ -236,15 +286,15 @@ class Peer{
       }
     };
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
-
     this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
     this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
       if (m.type==='PONG'){ const rtt=Date.now()-m.t; this._rttEMA=this._rttEMA==null?rtt:(0.8*this._rttEMA+0.2*rtt); this.rtt=Math.round(this._rttEMA); refreshWorkersUI(); return; }
-      if (m.type==='RESULT' && m.kind==='GA_EPOCH'){ this.inflight=Math.max(0,this.inflight-1); this.epochs++; refreshWorkersUI(); handleEpochResult(this.id, m.id, m.result); return; }
+      if (m.type==='RESULT' && m.kind==='GA_EPOCH'){
+        this.inflight=Math.max(0,this.inflight-1); this.epochs++; refreshWorkersUI(); handleEpochResult(this.id, m.id, m.result); return;
+      }
     };
-
     const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
     sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:offer });
     this.offerRetry = setInterval(async()=>{
@@ -262,7 +312,7 @@ class Peer{
 }
 function ensurePeer(id){ let p = workers.get(id); if (!p){ p=new Peer(id); workers.set(id,p); refreshWorkersUI(); enableRunIfReady(); } return p; }
 
-/***** Worker connection (worker side) *****/
+/***** Worker side *****/
 let workerConn = null;
 class WorkerConn{
   constructor(){ this.pc=null; this.ctrl=null; }
@@ -285,28 +335,22 @@ class WorkerConn{
   async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
 }
 
-/***** GA scheduling (coordinator) *****/
+/***** GA scheduling (coord) *****/
 let pending = []; const inFlightById = new Map();
-let elitePool = []; // array of {route,len}
-
+let elitePool = []; // {route,len}
 function planEpochJobs(){
-  const k = Math.max(1, workers.size);
   const params = {
     cities: CITY,
     pop: parseInt($("#pop").value,10),
     gens: parseInt($("#gens").value,10),
     mutPct: parseFloat($("#mut").value)/100,
     elites: parseInt($("#elites").value,10),
-    migrants: elitePool.slice(0, 12) // share top elites globally
+    migrants: elitePool.slice(0, 12)
   };
-  const jobs = [];
-  let i=0;
-  for (const [id,p] of workers){
-    jobs.push({ id:`ep_${epochNo}_${i++}_${Math.random().toString(36).slice(2,6)}`, params });
-  }
+  const jobs = []; let i=0;
+  for (const [id,p] of workers){ jobs.push({ id:`ep_${epochNo}_${i++}_${Math.random().toString(36).slice(2,6)}`, params }); }
   return jobs;
 }
-
 function scheduleLoop(){
   let made=false;
   for(let guard=0; guard< pending.length * 2; guard++){
@@ -325,7 +369,6 @@ function scheduleLoop(){
   }
   if (made) refreshWorkersUI();
 }
-
 function startEpoch(){
   if (!running || !workers.size) return;
   pill($("#epoch"), String(++epochNo), "ok");
@@ -334,21 +377,24 @@ function startEpoch(){
   scheduleLoop();
 }
 
-/***** Result handling *****/
+/***** Results *****/
 function handleEpochResult(fromId, id, result){
   inFlightById.delete(id);
-  // result: { best:{route,len}, elites:[{route,len}...] }
+  metrics.epochsCompleted++;
+  metrics.epochWindow.push(performance.now());
+  updateThroughput();
+
   if (result?.best && result.best.len < BEST.len){
-    BEST = result.best; draw();
+    BEST = result.best;
+    drawCitiesAndBest();
+    metrics.bestSeries.push({t: performance.now()-metrics.startTs, len: BEST.len});
+    drawChart();
     log("New BEST", BEST.len.toFixed(2), "from", String(fromId).slice(0,6));
   }
-  // merge elites
   elitePool = elitePool.concat(result.elites || []);
-  elitePool.sort((a,b)=>a.len-b.len);
-  if (elitePool.length>200) elitePool.length = 200;
+  elitePool.sort((a,b)=>a.len-b.len); if (elitePool.length>200) elitePool.length = 200;
 
-  // when all jobs for this epoch done → next epoch
-  const anyLeft = [...inFlightById.values()].some(rec => rec.job.params && rec.job.id.startsWith(`ep_${epochNo}_`));
+  const anyLeft = [...inFlightById.values()].some(rec => rec.job.id.startsWith(`ep_${epochNo}_`));
   if (!anyLeft && pending.length===0){ startEpoch(); }
 }
 
@@ -406,27 +452,16 @@ function tournament(pop, fit, k=3){
   }
   return best;
 }
-
-/* Run a worker epoch: evolve local population & return elites */
 function runEpochLocal(p){
-  const cities = p.cities;
-  const N = cities.length;
-  const popSize = p.pop|0;
-  const gens = p.gens|0;
-  const mutProb = p.mutPct||0.05;
-  // seed population: some random, some from migrants
+  const cities = p.cities, N = cities.length;
+  const popSize = p.pop|0, gens = p.gens|0, mutProb = p.mutPct||0.05;
   const migrants = (p.migrants||[]).slice(0, Math.min(20, popSize>>2)).map(e=>e.route.slice());
-  const pop = [];
-  for (const m of migrants){ pop.push(m.slice()); }
-  while (pop.length<popSize) pop.push(randPerm(N));
-
+  const pop = []; for (const m of migrants) pop.push(m.slice()); while (pop.length<popSize) pop.push(randPerm(N));
   const fit = new Array(pop.length);
   const evalAll = ()=>{ for (let i=0;i<pop.length;i++) fit[i]=routeLen(pop[i], cities); };
   evalAll();
-
   for (let g=0; g<gens; g++){
     const next = [];
-    // elitism: keep the best 2
     let idxs = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]).slice(0,2);
     next.push(pop[idxs[0]].slice(), pop[idxs[1]].slice());
     while (next.length < popSize){
@@ -435,85 +470,100 @@ function runEpochLocal(p){
       if (Math.random()<mutProb) mutateSwap(child);
       next.push(child);
     }
-    // replace and eval
     pop.length=0; Array.prototype.push.apply(pop, next);
     evalAll();
   }
-
-  // elites
   const order = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]);
   const elites = order.slice(0, p.elites||5).map(i=>({ route: pop[i].slice(), len: fit[i] }));
   const best = elites[0];
-
   return { best, elites };
 }
 
-/***** UI *****/
+/***** Controls *****/
 $("#start").onclick = async () => {
   try {
     $("#start").disabled = true; isCoord = true;
     roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
-    setStatus("Creating room…"); await openSignaling(roomId);
+    setStatus("Creating session…"); await openSignaling(roomId);
     const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
     $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my GA cluster",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
+    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my mesh",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#qr").onclick = () => showQR(url);
     $("#open").onclick = () => { const w = window.open('about:blank'); if (w) w.location.href = url; };
     $("#open").disabled = false;
-
-    setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url, peerId });
-    setStatus("Room created. Waiting for workers to join…");
+    setStatus("Session live. Recruit peers with the link or QR.");
   } catch (e) {
     setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
   }
 };
-
 $("#run").onclick = () => {
   if (!workers.size){ setStatus("No workers connected"); return; }
   const n = parseInt($("#cities").value,10);
-  if ($("#reset").value==='yes' || CITY.length!==n){ genCities(n); BEST={route:null,len:Infinity}; draw(); }
+  if ($("#reset").value==='yes' || CITY.length!==n){ genCities(n); BEST={route:null,len:Infinity}; drawCitiesAndBest(); metrics.bestSeries.length=0; }
   running = true; epochNo=0; elitePool.length=0;
-  $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false;
+  $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false; $("#export").disabled=false;
   setStatus(`Optimizing TSP: ${n} cities • ${workers.size} workers`);
+  metrics.startTs = performance.now();
+  metrics.epochsCompleted = 0; metrics.epochWindow.length=0;
   startEpoch();
 };
-
 $("#stop").onclick = () => {
   running=false; pending.length=0; setStatus("Stopped."); $("#run").disabled=false; $("#stop").disabled=true;
 };
-
 $("#snapshot").onclick = () => {
   const a=document.createElement('a'); a.download=`tsp_best_${CITY.length}.png`; a.href=canvas.toDataURL('image/png'); a.click();
 };
+$("#export").onclick = () => {
+  const rows = [["t_ms","best_len_px"], ...metrics.bestSeries.map(d=>[d.t.toFixed(1), d.len.toFixed(4)])];
+  const csv = rows.map(r=>r.join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"}); const url = URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download="nyxmesh_run.csv"; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 500);
+};
 
+/***** Enable run when usable *****/
 function enableRunIfReady(){
   if (!isCoord) return;
   const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
   $("#run").disabled = !anyUsable;
-  if (anyUsable) setStatus('Ready. Recruit workers and hit ▶️ Start.');
+  if (anyUsable) setStatus('Ready. Recruit peers and press ▶️ Start Optimization.');
 }
 
-/***** Worker auto-join *****/
+/***** Auto-join as worker *****/
 (async ()=>{
   const params = new URLSearchParams(location.hash.slice(1));
   const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
   roomId = rid; isCoord = (role !== 'worker');
-  setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
+  setStatus(isCoord? 'Coordinator mode' : 'Joining as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
   try {
     await openSignaling(roomId);
     if (!isCoord){
       workerConn = new WorkerConn(); await workerConn.start();
-      setDebug({ SIGNAL_URL, roomId, role:'worker', peerId });
       $("#start").disabled=true; $("#run").disabled=true;
     } else {
-      setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
       enableRunIfReady();
     }
   } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
 })();
 
-/***** QR *****/
+/***** Baseline (single-browser 30s) *****/
+$("#baseline").onclick = async () => {
+  const n = parseInt($("#cities").value,10);
+  if (CITY.length!==n) { genCities(n); drawCitiesAndBest(); }
+  const params = {
+    cities: CITY, pop: parseInt($("#pop").value,10),
+    gens: parseInt($("#gens").value,10), mutPct: parseFloat($("#mut").value)/100,
+    elites: parseInt($("#elites").value,10), migrants: []
+  };
+  const end = performance.now()+30000; let count=0;
+  setStatus("Running 30s local baseline…");
+  while (performance.now()<end){ runEpochLocal(params); count++; }
+  metrics.localBaselineEPS = count/30;
+  $("#kSpeedup").textContent = "1.0×"; // will be recomputed while running
+  setStatus(`Baseline measured: ${metrics.localBaselineEPS.toFixed(2)} epochs/sec on this device.`);
+};
+
+/***** QR (hosted) *****/
 function showQR(data){
   let div = document.getElementById('qrModal'); if (!div){
     div = document.createElement('div'); div.id='qrModal'; div.style.position='fixed'; div.style.inset='0'; div.style.background='rgba(0,0,0,.6)'; div.style.display='grid'; div.style.placeItems='center'; div.style.zIndex='9999';
