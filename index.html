@@ -106,12 +106,12 @@
   </div>
 
   <div class="card">
-    <h1>🗺️ Best Tour <span id="bestLen" class="pill">—</span></h1>
+    <h1>🗺️ Best Tour <span id="bestLen" class="pill">—</span> <span id="epoch" class="pill">0</span></h1>
     <canvas id="canvas" width="1024" height="640"></canvas>
 
     <h2>Progress</h2>
     <canvas id="chart" width="1024" height="120"></canvas>
-    <div class="small" style="margin:6px 0 10px">Best distance vs time (lower is better). </div>
+    <div class="small" style="margin:6px 0 10px">Best distance vs time (lower is better).</div>
 
     <h2>Activity</h2>
     <pre id="log" class="log mono"></pre>
@@ -128,10 +128,25 @@ let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 const MAX_INFLIGHT_PER_WORKER = 2;
 const EPOCH_TIMEOUT_MS = 15000;
+const JOBS_PER_WORKER = 2;            // ← send >1 job/worker/epoch
+let rrPtr = 0;                         // ← round-robin pointer
+
+/* Local single-file fallback (no WS server) */
+const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('nyxmesh-demo') : null;
+let bcMode = false;
+
+/* Force worker role if a tab opens the invite URL without &role=worker */
+(function forceWorkerIfInvited(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('room') && !h.get('role')) {
+    h.set('role','worker');
+    location.hash = '#' + h.toString();
+  }
+})();
 
 /***** DOM helpers *****/
 const $ = s => document.querySelector(s);
-function pill(el, text, cls){ el.textContent = text; el.className = "pill " + (cls||""); }
+function pill(el, text, cls){ if(!el) return; el.textContent = text; el.className = "pill " + (cls||""); }
 function setStatus(msg){ $("#status").textContent = msg; }
 const logEl = $("#log");
 function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${a.join(" ")}\n`; logEl.scrollTop = logEl.scrollHeight; }
@@ -154,14 +169,12 @@ let metrics = {
   bestSeries: [], // [ {t,len} ]
   epochsCompleted: 0,
   epochWindow: [],
-  lastThroughputTs: 0,
-  localBaselineEPS: null // epochs/sec (single worker baseline)
+  localBaselineEPS: null
 };
 
 /***** UI sync helpers *****/
 function refreshWorkersUI(){
   $("#kPeers").textContent = String(workers.size);
-  $("#workerCount") && ($("#workerCount").textContent = String(workers.size));
   const host = $("#workers"); host.innerHTML = "";
   for (const p of workers.values()){
     const el = document.createElement('div'); el.className = 'worker'; el.id = `w-${p.id}`;
@@ -193,8 +206,9 @@ function drawChart(){
   const t0 = metrics.bestSeries[0].t, t1 = metrics.bestSeries.at(-1).t;
   const min = Math.min(...metrics.bestSeries.map(d=>d.len));
   const max = Math.max(...metrics.bestSeries.map(d=>d.len));
+  const span = Math.max(1e-6, max - min);
   const xFor = t => (t - t0) / (t1 - t0 + 1) * (W-20) + 10;
-  const yFor = v => H-10 - (v - min) / (max - min + 1e-9) * (H-20);
+  const yFor = v => H-10 - (v - min) / span * (H-20);
   cctx.strokeStyle="#00e5a8"; cctx.lineWidth=2; cctx.beginPath();
   metrics.bestSeries.forEach((d,i)=>{ if (i===0) cctx.moveTo(xFor(d.t), yFor(d.len)); else cctx.lineTo(xFor(d.t), yFor(d.len)); });
   cctx.stroke();
@@ -206,49 +220,84 @@ function drawChart(){
 /***** KPI updates *****/
 function updateThroughput(){
   const now = performance.now();
-  metrics.epochWindow = metrics.epochWindow.filter(ts => now - ts < 2000); // last 2s
+  metrics.epochWindow = metrics.epochWindow.filter(ts => now - ts < 2000);
   const eps = metrics.epochWindow.length / 2;
   $("#kThroughput").textContent = eps.toFixed(1);
-  // speedup if baseline known
   if (metrics.localBaselineEPS){
     const speed = eps / metrics.localBaselineEPS;
     $("#kSpeedup").textContent = `${Math.max(1, speed).toFixed(1)}×`;
   }
-  // crude $ saved (vs cloud unit cost)
   const unit = parseFloat($("#unitCost").value || "0.000011");
-  const dollars = metrics.epochsCompleted * unit;
-  $("#kDollars").textContent = `$${dollars.toFixed(2)}`;
+  $("#kDollars").textContent = `$${(metrics.epochsCompleted * unit).toFixed(2)}`;
 }
 
-/***** Cities *****/
+/***** Cities + seed *****/
 function genCities(n){
-  CITY = Array.from({length:n}, ()=>({x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05, y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1}));
+  CITY = Array.from({length:n}, ()=>({
+    x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05,
+    y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1
+  }));
+}
+function seedNearestNeighbor(){
+  if (!CITY.length) return;
+  const used = new Set([0]);
+  let cur = 0;
+  const route = [0];
+  for (let k = 1; k < CITY.length; k++) {
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < CITY.length; i++) {
+      if (used.has(i)) continue;
+      const dx = CITY[cur].x - CITY[i].x, dy = CITY[cur].y - CITY[i].y;
+      const d = Math.hypot(dx,dy);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    used.add(best); route.push(best); cur = best;
+  }
+  BEST = { route, len: routeLen(route, CITY) };
+  metrics.bestSeries.length = 0;
+  metrics.bestSeries.push({ t: 0, len: BEST.len });
+  drawCitiesAndBest(); drawChart();
 }
 
-/***** Signaling *****/
-function sigSend(obj){ if(sig && sig.readyState === WebSocket.OPEN) sig.send(JSON.stringify(obj)); }
+/***** Signaling (WS + local fallback) *****/
+function sigSend(obj){
+  if (bcMode && bc) { bc.postMessage(obj); return; }
+  if (sig && sig.readyState === WebSocket.OPEN) sig.send(JSON.stringify(obj));
+}
 function openSignaling(id){
   return new Promise((res) => {
-    sig = new WebSocket(SIGNAL_URL);
-    sig.onopen = () => {
-      pill($("#sigState"), "open", "ok");
-      log("WS connected", SIGNAL_URL);
-      sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' });
-      sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' });
-      res();
-    };
-    sig.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } await onSignal(m); };
-    sig.onerror = (err) => { log("WS error", err?.message||err); pill($("#sigState"), "error", "bad"); };
-    sig.onclose = () => { pill($("#sigState"), "closed", "bad"); };
+    try{
+      sig = new WebSocket(SIGNAL_URL);
+      sig.onopen = () => {
+        pill($("#sigState"), "open", "ok");
+        log("WS connected", SIGNAL_URL);
+        sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' });
+        sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' });
+        res();
+      };
+      sig.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } await onSignal(m); };
+      sig.onerror = () => { throw new Error("WS error"); };
+      sig.onclose = () => { pill($("#sigState"), "closed", "bad"); };
+    }catch{
+      if (bc){
+        bcMode = true;
+        pill($("#sigState"), "local", "warn");
+        setStatus("Local demo mode (no server). Open more tabs on this machine.");
+        bc.onmessage = (e)=> onSignal(e.data);
+        res();
+      }
+    }
   });
 }
 async function onSignal(m){
   if (m.room && m.room !== roomId) return;
+
   if (!isCoord && m.type==='TASK_WS' && m.to===peerId && m.kind==='GA_EPOCH'){
     const out = runEpochLocal(m.params);
     sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'GA_EPOCH', result: out });
     return;
   }
+
   if (isCoord){
     if (m.type==='HELLO' && m.from && m.from!==peerId){ ensurePeer(m.from).maybeConnect(); return; }
     if (m.type==='PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
@@ -276,16 +325,28 @@ class Peer{
     this.wsOnly=false; this.offerRetry=null; this._everConnected=false;
   }
   async maybeConnect(){
-    if (this.pc || this.wsOnly) return;
+    if (this.pc || this.wsOnly || bcMode) {
+      if (bcMode) { this.wsOnly = true; enableRunIfReady(); refreshWorkersUI(); }
+      return;
+    }
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.onconnectionstatechange = () => {
       const s=this.pc.connectionState; this.state=s; refreshWorkersUI();
-      if (s==='connected'){ clearInterval(this.offerRetry); enableRunIfReady(); }
+      if (s==='connected'){ clearInterval(this.offerRetry); this._everConnected=true; enableRunIfReady(); }
       if (s==='failed' || s==='closed' || s==='disconnected'){
         if (!this._everConnected){ this.wsOnly=true; refreshWorkersUI(); enableRunIfReady(); }
       }
     };
+    // Stall → WS fallback (RTC never really connects)
+    setTimeout(() => {
+      if (!this._everConnected && this.state!=='connected') {
+        this.wsOnly = true; log('RTC stall → WS fallback for', this.id.slice(0,6));
+        enableRunIfReady(); refreshWorkersUI();
+      }
+    }, 6000);
+
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
+
     this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
     this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
     this.ctrl.onmessage = (ev)=>{
@@ -302,11 +363,14 @@ class Peer{
       try{ const o=await this.pc.createOffer(); await this.pc.setLocalDescription(o); sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:o }); }catch{}
     }, 3000);
   }
-  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected=true; }
+  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); }
   _startPings(){ this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 4000); }
   canSend(){ return this.wsOnly || (this.ctrl?.readyState==='open' && this.inflight<MAX_INFLIGHT_PER_WORKER); }
   sendEpoch(job){
-    if (this.wsOnly){ sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'GA_EPOCH', params:job.params }); this.inflight++; return true; }
+    if (this.wsOnly || bcMode){
+      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'GA_EPOCH', params:job.params });
+      this.inflight++; return true;
+    }
     try{ this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'GA_EPOCH', params:job.params })); this.inflight++; return true; }catch{ return false; }
   }
 }
@@ -317,6 +381,7 @@ let workerConn = null;
 class WorkerConn{
   constructor(){ this.pc=null; this.ctrl=null; }
   async start(){
+    if (bcMode) return; // local demo uses WS-style messages
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } };
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
@@ -338,6 +403,8 @@ class WorkerConn{
 /***** GA scheduling (coord) *****/
 let pending = []; const inFlightById = new Map();
 let elitePool = []; // {route,len}
+let dispatchedForEpoch = 0;
+
 function planEpochJobs(){
   const params = {
     cities: CITY,
@@ -347,33 +414,56 @@ function planEpochJobs(){
     elites: parseInt($("#elites").value,10),
     migrants: elitePool.slice(0, 12)
   };
-  const jobs = []; let i=0;
-  for (const [id,p] of workers){ jobs.push({ id:`ep_${epochNo}_${i++}_${Math.random().toString(36).slice(2,6)}`, params }); }
+  const ids = [...workers.keys()];
+  const jobs = [];
+  for (let j=0; j<JOBS_PER_WORKER; j++){
+    for (const id of ids){
+      jobs.push({ id:`ep_${epochNo}_${j}_${id.slice(0,6)}_${Math.random().toString(36).slice(2,6)}`, params });
+    }
+  }
   return jobs;
 }
+
 function scheduleLoop(){
   let made=false;
+  const peers = [...workers.values()];
+  const N = peers.length || 1;
+
   for(let guard=0; guard< pending.length * 2; guard++){
     if (!pending.length) break;
-    let best=null, bestScore=Infinity;
-    for(const p of workers.values()){
-      if (!p.canSend()) continue;
+
+    // round-robin starting point
+    let best=null, bestScore=Infinity, start = rrPtr;
+    for(let k=0;k<N;k++){
+      const p = peers[(start + k) % N];
+      if (!p || !p.canSend()) continue;
       const score = (p.inflight||0) + 0.003*(p.rtt||120) - 0.1*(p.epochs||0);
       if (score<bestScore){ best=p; bestScore=score; }
     }
+    rrPtr = (rrPtr + 1) % N;
     if (!best) break;
+
     const job = pending.shift();
     const ok = best.sendEpoch(job);
-    if (ok){ inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() }); made=true; }
-    else { pending.unshift(job); break; }
+    if (ok){
+      inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() });
+      dispatchedForEpoch++;
+      made = true;
+      log('Dispatch', job.id, '→', best.id.slice(0,6));
+    } else {
+      pending.unshift(job);
+      break;
+    }
   }
   if (made) refreshWorkersUI();
 }
+
 function startEpoch(){
   if (!running || !workers.size) return;
   pill($("#epoch"), String(++epochNo), "ok");
   const jobs = planEpochJobs();
   pending = jobs;
+  dispatchedForEpoch = 0;
   scheduleLoop();
 }
 
@@ -384,18 +474,26 @@ function handleEpochResult(fromId, id, result){
   metrics.epochWindow.push(performance.now());
   updateThroughput();
 
-  if (result?.best && result.best.len < BEST.len){
+  if (!result || !result.best || !isFinite(result.best.len)){
+    log("WARN: bad result from", String(fromId).slice(0,6));
+  } else if (result.best.len < BEST.len){
     BEST = result.best;
     drawCitiesAndBest();
     metrics.bestSeries.push({t: performance.now()-metrics.startTs, len: BEST.len});
     drawChart();
     log("New BEST", BEST.len.toFixed(2), "from", String(fromId).slice(0,6));
   }
-  elitePool = elitePool.concat(result.elites || []);
-  elitePool.sort((a,b)=>a.len-b.len); if (elitePool.length>200) elitePool.length = 200;
+  if (result?.elites?.length){
+    elitePool.push(...result.elites);
+    elitePool.sort((a,b)=>a.len-b.len);
+    if (elitePool.length>200) elitePool.length = 200;
+  }
 
-  const anyLeft = [...inFlightById.values()].some(rec => rec.job.id.startsWith(`ep_${epochNo}_`));
-  if (!anyLeft && pending.length===0){ startEpoch(); }
+  const stillInThisEpoch = [...inFlightById.keys()].some(k => k.startsWith(`ep_${epochNo}_`));
+  const stillQueued = pending.some(j => j.id.startsWith(`ep_${epochNo}_`));
+  const allReturned = !stillInThisEpoch && !stillQueued && dispatchedForEpoch > 0;
+
+  if (allReturned && running) startEpoch();
 }
 
 /***** Timeout / requeue *****/
@@ -410,6 +508,7 @@ setInterval(()=>{
     }
   }
   if (pending.length) scheduleLoop();
+  else if (running && inFlightById.size===0) startEpoch();
 }, 800);
 
 /***** GA core (shared) *****/
@@ -434,12 +533,13 @@ function oxCrossover(p1,p2){
   const n=p1.length, a=(Math.random()*n)|0, b=(Math.random()*n)|0;
   const lo=Math.min(a,b), hi=Math.max(a,b);
   const child=new Array(n).fill(-1);
-  for(let i=lo;i<=hi;i++) child[i]=p1[i];
+  const used = new Uint8Array(n);
+  for(let i=lo;i<=hi;i++){ child[i]=p1[i]; used[p1[i]] = 1; }
   let pos=(hi+1)%n;
   for(let i=0;i<n;i++){
     const gene=p2[(hi+1+i)%n];
-    if (!child.includes(gene)){
-      child[pos]=gene; pos=(pos+1)%n;
+    if (!used[gene]){
+      child[pos]=gene; used[gene]=1; pos=(pos+1)%n;
     }
   }
   return child;
@@ -490,8 +590,11 @@ $("#start").onclick = async () => {
     $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my mesh",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#qr").onclick = () => showQR(url);
-    $("#open").onclick = () => { const w = window.open('about:blank'); if (w) w.location.href = url; };
-    $("#open").disabled = false;
+    $("#open").onclick = (e) => {
+      const count = e.shiftKey ? 5 : 1;
+      for (let i=0;i<count;i++){ const w = window.open('about:blank'); if (w) w.location.href = url; }
+    };
+    $("#open").disabled = true; // enabled when ready (below)
     setStatus("Session live. Recruit peers with the link or QR.");
   } catch (e) {
     setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
@@ -500,7 +603,10 @@ $("#start").onclick = async () => {
 $("#run").onclick = () => {
   if (!workers.size){ setStatus("No workers connected"); return; }
   const n = parseInt($("#cities").value,10);
-  if ($("#reset").value==='yes' || CITY.length!==n){ genCities(n); BEST={route:null,len:Infinity}; drawCitiesAndBest(); metrics.bestSeries.length=0; }
+  if ($("#reset").value==='yes' || CITY.length!==n){
+    genCities(n);
+    seedNearestNeighbor(); // show something immediately
+  }
   running = true; epochNo=0; elitePool.length=0;
   $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false; $("#export").disabled=false;
   setStatus(`Optimizing TSP: ${n} cities • ${workers.size} workers`);
@@ -526,6 +632,7 @@ function enableRunIfReady(){
   if (!isCoord) return;
   const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
   $("#run").disabled = !anyUsable;
+  $("#open").disabled = false;
   if (anyUsable) setStatus('Ready. Recruit peers and press ▶️ Start Optimization.');
 }
 
@@ -538,9 +645,11 @@ function enableRunIfReady(){
   try {
     await openSignaling(roomId);
     if (!isCoord){
+      if (bcMode) sigSend({ type:"HELLO", room:roomId, from:peerId, role:'worker' });
       workerConn = new WorkerConn(); await workerConn.start();
       $("#start").disabled=true; $("#run").disabled=true;
     } else {
+      if (bcMode) sigSend({ type:"HELLO", room:roomId, from:peerId, role:'coordinator' });
       enableRunIfReady();
     }
   } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
@@ -549,7 +658,7 @@ function enableRunIfReady(){
 /***** Baseline (single-browser 30s) *****/
 $("#baseline").onclick = async () => {
   const n = parseInt($("#cities").value,10);
-  if (CITY.length!==n) { genCities(n); drawCitiesAndBest(); }
+  if (CITY.length!==n) { genCities(n); seedNearestNeighbor(); }
   const params = {
     cities: CITY, pop: parseInt($("#pop").value,10),
     gens: parseInt($("#gens").value,10), mutPct: parseFloat($("#mut").value)/100,
@@ -559,7 +668,7 @@ $("#baseline").onclick = async () => {
   setStatus("Running 30s local baseline…");
   while (performance.now()<end){ runEpochLocal(params); count++; }
   metrics.localBaselineEPS = count/30;
-  $("#kSpeedup").textContent = "1.0×"; // will be recomputed while running
+  $("#kSpeedup").textContent = "1.0×";
   setStatus(`Baseline measured: ${metrics.localBaselineEPS.toFixed(2)} epochs/sec on this device.`);
 };
 
@@ -576,6 +685,13 @@ function showQR(data){
   const img = document.getElementById('qrImg');
   const api = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(data);
   img.src = api;
+}
+
+/* In local fallback mode, emulate peer presence when tabs join */
+if (bcMode && bc){
+  window.addEventListener('load', () => {
+    if (roomId) sigSend({ type:"PEER_JOINED", room:roomId, peer:peerId });
+  });
 }
 </script>
 </body>
