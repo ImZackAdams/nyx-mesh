@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • P2P Boids Swarm (Multi-Worker, WS/RTC)</title>
+<title>NyxMesh • P2P GA Optimizer (Distributed TSP)</title>
 <style>
   :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d}
   *{box-sizing:border-box} html,body{height:100%}
@@ -22,26 +22,23 @@
   .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#24243a;color:var(--ink);font-size:12px}
   .ok{background:#1d3d23;color:var(--good)}.warn{background:#3d3d1d;color:var(--warn)}.bad{background:#3d1d1d;color:var(--bad)}
-  .log{height:220px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
+  .log{height:200px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
   .status{margin-top:10px;padding:8px;border-radius:8px;background:#1a1a24;border:1px solid #2a2a3a;font-size:13px}
   canvas{width:100%;height:auto;background:#0c0c14;border:1px solid #242436;border-radius:10px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .grid.single{grid-template-columns:1fr}
-  label small{color:var(--muted);display:block;margin-top:4px}
   .workers{margin-top:6px;display:flex;flex-direction:column;gap:6px}
   .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #2b2b3a;border-radius:10px;background:#12121a}
   .muted{color:var(--muted)}
-  .caps{font-variant:all-small-caps;letter-spacing:.04em}
   @media (max-width: 860px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🕊️ NyxMesh Boids Swarm (Multi-Worker)</h1>
+    <h1>🧬 NyxMesh GA (Distributed TSP)</h1>
     <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
     <div class="kv"><span>Workers</span><span id="workerCount" class="pill">0</span></div>
-    <div class="kv"><span>Scheduler</span><span id="sched" class="pill">idle</span></div>
+    <div class="kv"><span>Epoch</span><span id="epoch" class="pill">0</span></div>
 
     <h2>Session</h2>
     <div class="row"><button id="start" class="btn">Start Session</button></div>
@@ -54,66 +51,56 @@
     </div>
     <div class="status" id="status">Create a session and send the link to workers.</div>
 
-    <h2>Swarm Controls</h2>
+    <h2>GA Controls</h2>
     <div class="grid">
-      <label>Boids
-        <input id="numBoids" type="number" value="600" min="50" step="50"/>
-        <small>Total agents in the flock</small>
+      <label>Cities
+        <input id="cities" type="number" value="40" min="8" max="120"/>
+        <small>Problem size</small>
       </label>
-      <label>Perception
-        <input id="perception" type="number" value="42" min="10" max="200" step="2"/>
-        <small>Neighbor radius (px)</small>
-      </label>
-    </div>
-    <div class="grid" style="margin-top:8px">
-      <label>Max Speed
-        <input id="maxSpeed" type="number" value="2.2" min="0.2" max="6" step="0.1"/>
-        <small>Units per frame</small>
-      </label>
-      <label>Max Force
-        <input id="maxForce" type="number" value="0.05" min="0.01" max="0.5" step="0.01"/>
-        <small>Steering clamp</small>
+      <label>Pop / Worker
+        <input id="pop" type="number" value="150" min="20" step="10"/>
+        <small>Local population</small>
       </label>
     </div>
     <div class="grid" style="margin-top:8px">
-      <label>Alignment
-        <input id="wAlign" type="number" value="1.0" min="0" max="3" step="0.1"/>
-        <small>Match heading</small>
+      <label>Gen / Epoch
+        <input id="gens" type="number" value="80" min="10" step="10"/>
+        <small>Worker generations per epoch</small>
       </label>
-      <label>Cohesion
-        <input id="wCoh" type="number" value="0.8" min="0" max="3" step="0.1"/>
-        <small>Move toward neighbors</small>
+      <label>Mutation %
+        <input id="mut" type="number" value="8" min="0" max="50"/>
+        <small>Swap mutate chance</small>
       </label>
     </div>
     <div class="grid" style="margin-top:8px">
-      <label>Separation
-        <input id="wSep" type="number" value="1.2" min="0" max="3" step="0.1"/>
-        <small>Avoid crowding</small>
+      <label>Elites / Worker
+        <input id="elites" type="number" value="5" min="1" max="20"/>
+        <small>Migrate these up</small>
       </label>
-      <label>Edge Mode
-        <select id="edgeMode">
-          <option value="wrap" selected>Wrap</option>
-          <option value="bounce">Bounce</option>
+      <label>Reset Cities
+        <select id="reset">
+          <option value="no" selected>No</option>
+          <option value="yes">Yes</option>
         </select>
-        <small>World boundary behavior</small>
+        <small>Regenerate instances</small>
       </label>
     </div>
 
     <div class="row" style="margin-top:10px;">
-      <button id="run" class="btn" disabled>▶️ Start Swarm</button>
+      <button id="run" class="btn" disabled>▶️ Start</button>
       <button id="stop" class="btn secondary" disabled>Stop</button>
-      <button id="snapshot" class="btn ghost" disabled>Snapshot PNG</button>
+      <button id="snapshot" class="btn ghost" disabled>Snapshot</button>
     </div>
 
     <h2>Workers</h2>
     <div id="workers" class="workers"></div>
 
     <h2>Debug</h2>
-    <textarea id="debug" rows="6" class="mono" readonly></textarea>
+    <textarea id="debug" rows="5" class="mono" readonly></textarea>
   </div>
 
   <div class="card">
-    <h1>🫧 Flock</h1>
+    <h1>🗺️ Best Tour <span id="bestLen" class="pill">—</span></h1>
     <canvas id="canvas" width="1024" height="768"></canvas>
     <h2>Activity</h2>
     <pre id="log" class="log mono"></pre>
@@ -128,8 +115,8 @@ const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
 let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 (() => { const u = new URL(location.href); const override = u.searchParams.get("signal"); if (override) SIGNAL_URL = override; })();
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
-const MAX_INFLIGHT_PER_WORKER = 2;      // per-frame slices per worker
-const JOB_TIMEOUT_MS = 8000;
+const MAX_INFLIGHT_PER_WORKER = 2;
+const EPOCH_TIMEOUT_MS = 15000;
 
 /***** DOM helpers *****/
 const $ = s => document.querySelector(s);
@@ -147,38 +134,41 @@ let sig = null; // WebSocket
 const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
 let CANVAS_W = canvas.width, CANVAS_H = canvas.height;
 
-// Swarm state (coordinator only)
-let N = 0;
-let pos = null; // Float32Array length 2N: [x0,y0,x1,y1,...]
-let vel = null; // Float32Array length 2N
-let running = false;
-let frameId = 0;
-
-const params = () => ({
-  perception: parseFloat($("#perception").value),
-  maxSpeed:   parseFloat($("#maxSpeed").value),
-  maxForce:   parseFloat($("#maxForce").value),
-  wAlign:     parseFloat($("#wAlign").value),
-  wCoh:       parseFloat($("#wCoh").value),
-  wSep:       parseFloat($("#wSep").value),
-  edgeMode:   $("#edgeMode").value,
-  width: CANVAS_W, height: CANVAS_H
-});
-
-/***** Workers UI *****/
-const workers = new Map(); // peerId -> Peer
+const workers = new Map(); // id -> Peer
 function refreshWorkersUI(){
   $("#workerCount").textContent = String(workers.size);
   const host = $("#workers"); host.innerHTML = "";
   for (const p of workers.values()){
     const el = document.createElement('div'); el.className = 'worker'; el.id = `w-${p.id}`;
     el.innerHTML = `
-      <div class="mono">${p.id.slice(0,8)} <span class="muted caps">${p.wsOnly? 'ws-only' : p.state}</span></div>
-      <div class="pill ${p.rtt<80?'ok':p.rtt<200?'warn':'bad'}" title="RTT">${p.rtt? p.rtt+"ms":"—"}</div>
-      <div class="pill" title="In flight">${p.inflight}</div>
-      <div class="pill" title="Slices/sec">${p.tilesPerSec.toFixed(1)}</div>`;
+      <div class="mono">${p.id.slice(0,8)} <span class="muted">${p.wsOnly? 'ws-only' : p.state}</span></div>
+      <div class="pill ${p.rtt<80?'ok':p.rtt<200?'warn':'bad'}">${p.rtt? p.rtt+'ms':'—'}</div>
+      <div class="pill">inflight ${p.inflight}</div>
+      <div class="pill">epochs ${p.epochs||0}</div>`;
     host.appendChild(el);
   }
+}
+
+/***** TSP instance + best tracking (coordinator) *****/
+let CITY = [];      // [{x,y},...]
+let BEST = { route:null, len:Infinity };
+let running=false, epochNo=0;
+function genCities(n){
+  CITY = Array.from({length:n}, ()=>({x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05, y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1}));
+}
+function draw(){
+  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+  // cities
+  ctx.fillStyle="#eaeaf2"; for (const c of CITY){ ctx.beginPath(); ctx.arc(c.x,c.y,3,0,Math.PI*2); ctx.fill(); }
+  // best path
+  if (BEST.route){
+    ctx.strokeStyle="#9b5cff"; ctx.lineWidth=2; ctx.beginPath();
+    let i0 = BEST.route[0]; ctx.moveTo(CITY[i0].x, CITY[i0].y);
+    for (let i=1;i<BEST.route.length;i++){ const ci = CITY[BEST.route[i]]; ctx.lineTo(ci.x,ci.y); }
+    ctx.lineTo(CITY[i0].x, CITY[i0].y);
+    ctx.stroke();
+  }
+  $("#bestLen").textContent = (BEST.len<Infinity? BEST.len.toFixed(1) : "—");
 }
 
 /***** Signaling *****/
@@ -202,419 +192,260 @@ function openSignaling(id){
 async function onSignal(m){
   if (m.room && m.room !== roomId) return;
 
-  // Worker-only WS fallback jobs
-  if (!isCoord && m.type === 'TASK_WS' && m.to === peerId){
-    if (m.kind === 'BOIDS_STEP'){
-      const out = boidsStepWS(m.params);
-      sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'BOIDS_STEP', frameId:m.params.frameId, start:m.params.range.start, count:m.params.range.count, base64:out });
-    }
+  // WS fallback for worker epochs
+  if (!isCoord && m.type==='TASK_WS' && m.to===peerId && m.kind==='GA_EPOCH'){
+    const out = runEpochLocal(m.params);
+    sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'GA_EPOCH', result: out });
     return;
   }
 
   if (isCoord){
-    if (m.type === 'HELLO' && m.from && m.from !== peerId){ ensurePeer(m.from).maybeConnect(); return; }
-    if (m.type === 'PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
-    if (m.type === 'ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
-    if (m.type === 'ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
-    if (m.type === 'RESULT_WS' && m.from){ handleBoidsWS(m); return; }
+    if (m.type==='HELLO' && m.from && m.from!==peerId){ ensurePeer(m.from).maybeConnect(); return; }
+    if (m.type==='PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
+    if (m.type==='ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
+    if (m.type==='ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
+    if (m.type==='RESULT_WS' && m.from && m.kind==='GA_EPOCH'){ handleEpochResult(m.from, m.id, m.result); return; }
   } else {
-    if (m.type === 'OFFER' && (m.to===peerId || !m.to)){
+    if (m.type==='OFFER' && (m.to===peerId || !m.to)){
       if (!workerConn) { workerConn = new WorkerConn(); await workerConn.start(); }
       await workerConn.acceptOffer(m.sdp, m.from);
       return;
     }
-    if (m.type === 'ICE' && (m.to===peerId || !m.to)){
+    if (m.type==='ICE' && (m.to===peerId || !m.to)){
       try { await workerConn?.pc?.addIceCandidate(m.candidate); } catch {}
       return;
     }
   }
 }
 
-/***** Coordinator: Peer wrapper *****/
+/***** Peer wrapper (coordinator side) *****/
 class Peer{
   constructor(id){
-    this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle';
-    this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0;
-    this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now();
-    this.pendingMeta=[]; this.offerRetry=null; this._everConnected=false;
+    this.id=id; this.pc=null; this.ctrl=null; this.state='idle';
+    this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.epochs=0;
+    this.wsOnly=false; this.offerRetry=null; this._everConnected=false;
   }
   async maybeConnect(){
     if (this.pc || this.wsOnly) return;
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.onconnectionstatechange = () => {
-      const s=this.pc.connectionState; this.state = s; refreshWorkersUI();
+      const s=this.pc.connectionState; this.state=s; refreshWorkersUI();
       if (s==='connected'){ clearInterval(this.offerRetry); enableRunIfReady(); }
       if (s==='failed' || s==='closed' || s==='disconnected'){
-        if (!this._everConnected){
-          this.wsOnly = true;
-          log('RTC failed for', this.id, '→ WS fallback'); refreshWorkersUI(); enableRunIfReady();
-        }
+        if (!this._everConnected){ this.wsOnly=true; refreshWorkersUI(); enableRunIfReady(); }
       }
     };
-    this.pc.oniceconnectionstatechange = () => refreshWorkersUI();
-    this.pc.onicecandidate = (e) => { if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
+    this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
 
     this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
-    this.data = this.pc.createDataChannel('data',{ordered:true});
-    this.data.binaryType = 'arraybuffer';
-    this.data.bufferedAmountLowThreshold = 1<<20;
-
-    this.wireCtrl(); this.wireData();
+    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
+    this.ctrl.onmessage = (ev)=>{
+      const m = JSON.parse(ev.data);
+      if (m.type==='PONG'){ const rtt=Date.now()-m.t; this._rttEMA=this._rttEMA==null?rtt:(0.8*this._rttEMA+0.2*rtt); this.rtt=Math.round(this._rttEMA); refreshWorkersUI(); return; }
+      if (m.type==='RESULT' && m.kind==='GA_EPOCH'){ this.inflight=Math.max(0,this.inflight-1); this.epochs++; refreshWorkersUI(); handleEpochResult(this.id, m.id, m.result); return; }
+    };
 
     const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
     sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:offer });
     this.offerRetry = setInterval(async()=>{
-      if (this.pc?.connectionState==='connected' || this.pc?.remoteDescription?.type==='answer') { clearInterval(this.offerRetry); return; }
-      try{ const o = await this.pc.createOffer(); await this.pc.setLocalDescription(o); sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:o }); log('Offer retry →', this.id); }catch{}
+      if (this.pc?.connectionState==='connected' || this.pc?.remoteDescription?.type==='answer'){ clearInterval(this.offerRetry); return; }
+      try{ const o=await this.pc.createOffer(); await this.pc.setLocalDescription(o); sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:o }); }catch{}
     }, 3000);
   }
-  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected = true; }
-  wireCtrl(){
-    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
-    this.ctrl.onmessage = (ev)=>{
-      const m = JSON.parse(ev.data);
-      if (m.type==='PONG'){
-        const rtt = Date.now()-m.t;
-        this._rttEMA = this._rttEMA==null? rtt : (0.8*this._rttEMA + 0.2*rtt);
-        this.rtt = Math.round(this._rttEMA);
-        refreshWorkersUI();
-      }
-      if (m.type==='RESULT_META'){ this.pendingMeta.push(m); }
-    };
-  }
-  wireData(){
-    this.data.onmessage = (ev)=>{
-      const meta = this.pendingMeta.shift();
-      if (!meta){ log('WARN: data w/o meta from', this.id); return; }
-      if (meta.kind === 'BOIDS_STEP'){
-        applyBoidsSlice(meta, ev.data); // merge into global arrays
-        onSliceDone(meta.id);
-      }
-      this.inflight = Math.max(0, this.inflight-1);
-      this._recvTiles++;
-      const now = performance.now();
-      if (now - this._recvWindowStart > 1000){
-        this.tilesPerSec = this._recvTiles / ((now - this._recvWindowStart)/1000);
-        this._recvTiles = 0; this._recvWindowStart = now; refreshWorkersUI();
-      }
-    };
-  }
-  _startPings(){ this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 5000); }
-  canSend(){
-    return (this.wsOnly) || (this.ctrl?.readyState==='open' && this.data?.readyState==='open'
-      && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20));
-  }
-  sendSlice(job){ // job: {id, params, range}
-    if (this.wsOnly){
-      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'BOIDS_STEP', params: job.params });
-      this.inflight++; return true;
-    }
-    try{
-      // Send meta then binary payload (global pos/vel) for this frame
-      this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'BOIDS_STEP', frameId:job.params.frameId, range:job.params.range, par:job.params.par }));
-      this.data.send(job.params.binary); // transferable ArrayBuffer with packed pos+vel
-      this.inflight++; return true;
-    }catch(e){ log('Send error', e?.message||e); return false; }
+  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected=true; }
+  _startPings(){ this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 4000); }
+  canSend(){ return this.wsOnly || (this.ctrl?.readyState==='open' && this.inflight<MAX_INFLIGHT_PER_WORKER); }
+  sendEpoch(job){
+    if (this.wsOnly){ sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'GA_EPOCH', params:job.params }); this.inflight++; return true; }
+    try{ this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'GA_EPOCH', params:job.params })); this.inflight++; return true; }catch{ return false; }
   }
 }
-function ensurePeer(id){
-  let p = workers.get(id);
-  if (!p){ p = new Peer(id); workers.set(id,p); refreshWorkersUI(); enableRunIfReady(); }
-  return p;
-}
+function ensurePeer(id){ let p = workers.get(id); if (!p){ p=new Peer(id); workers.set(id,p); refreshWorkersUI(); enableRunIfReady(); } return p; }
 
-/***** Worker side connection *****/
+/***** Worker connection (worker side) *****/
 let workerConn = null;
 class WorkerConn{
-  constructor(){ this.pc=null; this.ctrl=null; this.data=null; this._pendingTask=null; }
+  constructor(){ this.pc=null; this.ctrl=null; }
   async start(){
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-    this.pc.ondatachannel = (e)=>{
-      if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); }
-      else if (e.channel.label==='data'){ this.data=e.channel; this.data.binaryType='arraybuffer'; this.wireData(); }
-    };
+    this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } };
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
   }
   wireCtrl(){
-    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for slices…'); };
+    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for epochs…'); };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
       if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; }
-      if (m.type==='TASK' && m.kind==='BOIDS_STEP'){
-        // meta arrives here; binary with state will arrive on data channel
-        this._pendingTask = { id:m.id, frameId:m.frameId, range:m.range, par:m.par };
+      if (m.type==='TASK' && m.kind==='GA_EPOCH'){
+        const res = runEpochLocal(m.params);
+        try{ this.ctrl.send(JSON.stringify({ type:'RESULT', id:m.id, kind:'GA_EPOCH', result:res })); }catch(e){ log('Send error', e?.message||e); }
       }
     };
   }
-  wireData(){
-    this.data.onmessage = (ev)=>{
-      // got binary state for a pending slice → compute & return
-      const t = this._pendingTask; if (!t) return;
-      const outBuf = boidsStepBinary(ev.data, t.range, t.par);
-      try{
-        this.ctrl.send(JSON.stringify({ type:'RESULT_META', id:t.id, kind:'BOIDS_STEP', frameId:t.frameId, range:t.range }));
-        this.data?.send(outBuf);
-      }catch(e){ log('Send error', e?.message||e); }
-      this._pendingTask = null;
-    };
-  }
-  async acceptOffer(offer, from){
-    await this.pc.setRemoteDescription(offer);
-    const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans);
-    sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans });
-  }
+  async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
 }
 
-/***** Scheduler (per-frame slice dispatcher) *****/
-let pendingJobs = [];
-const inFlightById = new Map();
-let slicesExpected = 0, slicesDone = 0;
+/***** GA scheduling (coordinator) *****/
+let pending = []; const inFlightById = new Map();
+let elitePool = []; // array of {route,len}
 
-function planSlices(){
-  const peers = [...workers.values()].filter(p => p.canSend());
-  const k = Math.max(1, peers.length);
-  const per = Math.ceil(N / k);
+function planEpochJobs(){
+  const k = Math.max(1, workers.size);
+  const params = {
+    cities: CITY,
+    pop: parseInt($("#pop").value,10),
+    gens: parseInt($("#gens").value,10),
+    mutPct: parseFloat($("#mut").value)/100,
+    elites: parseInt($("#elites").value,10),
+    migrants: elitePool.slice(0, 12) // share top elites globally
+  };
   const jobs = [];
-  let start = 0;
-  for (let i=0;i<k;i++){
-    const count = Math.min(per, N - start);
-    if (count<=0) break;
-    const id = `bo_${frameId}_${i}_${Math.random().toString(36).slice(2,6)}`;
-    // Pack global state into binary: [pos(2N), vel(2N)] Float32
-    const bin = packState(pos, vel);
-    const job = {
-      id,
-      params: {
-        frameId,
-        range: { start, count },
-        par: params(),
-        binary: bin // transferable
-      }
-    };
-    jobs.push(job);
-    start += count;
+  let i=0;
+  for (const [id,p] of workers){
+    jobs.push({ id:`ep_${epochNo}_${i++}_${Math.random().toString(36).slice(2,6)}`, params });
   }
   return jobs;
 }
 
 function scheduleLoop(){
-  let made = false;
-  for(let guard=0; guard< pendingJobs.length * 2; guard++){
-    if (!pendingJobs.length) break;
+  let made=false;
+  for(let guard=0; guard< pending.length * 2; guard++){
+    if (!pending.length) break;
     let best=null, bestScore=Infinity;
     for(const p of workers.values()){
       if (!p.canSend()) continue;
-      const score = (p.inflight || 0) + 0.003 * (p.rtt || 120) - 0.2 * (p.tilesPerSec || 0);
-      if (score < bestScore) { best = p; bestScore = score; }
+      const score = (p.inflight||0) + 0.003*(p.rtt||120) - 0.1*(p.epochs||0);
+      if (score<bestScore){ best=p; bestScore=score; }
     }
     if (!best) break;
-    const job = pendingJobs.shift();
-    const ok = best.sendSlice(job);
-    if (ok){
-      inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() });
-      made = true;
-    } else { pendingJobs.unshift(job); break; }
+    const job = pending.shift();
+    const ok = best.sendEpoch(job);
+    if (ok){ inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() }); made=true; }
+    else { pending.unshift(job); break; }
   }
-  pill($("#sched"), pendingJobs.length? `queued ${pendingJobs.length}` : 'idle', pendingJobs.length? 'warn':'ok');
   if (made) refreshWorkersUI();
 }
 
-function startFrame(){
+function startEpoch(){
   if (!running || !workers.size) return;
-  slicesDone = 0;
-  const jobs = planSlices();
-  slicesExpected = jobs.length;
-  pendingJobs = jobs;
+  pill($("#epoch"), String(++epochNo), "ok");
+  const jobs = planEpochJobs();
+  pending = jobs;
   scheduleLoop();
 }
 
-function onSliceDone(id){
-  const rec = inFlightById.get(id);
-  if (rec) inFlightById.delete(id);
-  slicesDone++;
-  if (slicesDone >= slicesExpected){
-    drawBoids();
-    frameId++;
-    startFrame(); // next frame
+/***** Result handling *****/
+function handleEpochResult(fromId, id, result){
+  inFlightById.delete(id);
+  // result: { best:{route,len}, elites:[{route,len}...] }
+  if (result?.best && result.best.len < BEST.len){
+    BEST = result.best; draw();
+    log("New BEST", BEST.len.toFixed(2), "from", String(fromId).slice(0,6));
   }
+  // merge elites
+  elitePool = elitePool.concat(result.elites || []);
+  elitePool.sort((a,b)=>a.len-b.len);
+  if (elitePool.length>200) elitePool.length = 200;
+
+  // when all jobs for this epoch done → next epoch
+  const anyLeft = [...inFlightById.values()].some(rec => rec.job.params && rec.job.id.startsWith(`ep_${epochNo}_`));
+  if (!anyLeft && pending.length===0){ startEpoch(); }
 }
 
-// Requeue stale jobs
+/***** Timeout / requeue *****/
 setInterval(()=>{
-  const now = Date.now();
+  const now=Date.now();
   for (const [id, rec] of [...inFlightById]){
-    if (now - rec.ts > JOB_TIMEOUT_MS){
-      const { job } = rec;
-      log('Timeout → requeue', id);
-      // resubmit same slice for current frame only if frame still current
-      if (job.params.frameId === frameId){
-        pendingJobs.push({ id:`re_${Math.random().toString(36).slice(2,8)}`, params: job.params });
-      }
+    if (now - rec.ts > EPOCH_TIMEOUT_MS){
+      log('Epoch task timeout → requeue', id);
+      pending.push(rec.job);
       inFlightById.delete(id);
-      const p = workers.get(rec.peer); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
+      const p = workers.get(rec.peer); if (p){ p.inflight=Math.max(0,p.inflight-1); refreshWorkersUI(); }
     }
   }
-  if (pendingJobs.length) scheduleLoop();
-}, 500);
+  if (pending.length) scheduleLoop();
+}, 800);
 
-/***** Merge results (coord) *****/
-function applyBoidsSlice(meta, buf){
-  if (meta.frameId !== frameId) return; // stale
-  const { start, count } = meta.range;
-  const f32 = new Float32Array(buf);
-  const len = count*2;
-  pos.set(f32.subarray(0, len), start*2);
-  vel.set(f32.subarray(len, len*2), start*2);
-}
-
-/***** WS fallback encode/decode *****/
-function bytesToBase64(bytes){
-  let binary=""; const CHUNK=0x8000;
-  for(let i=0;i<bytes.length;i+=CHUNK){
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length)));
+/***** GA core (shared) *****/
+function routeLen(route, cities){
+  let s=0, n=route.length;
+  for (let i=0;i<n;i++){
+    const a=cities[route[i]], b=cities[route[(i+1)%n]];
+    const dx=a.x-b.x, dy=a.y-b.y; s += Math.hypot(dx,dy);
   }
-  return btoa(binary);
+  return s;
 }
-function base64ToBytes(b64){ const bin=atob(b64); const len=bin.length; const out=new Uint8Array(len); for(let i=0;i<len;i++) out[i]=bin.charCodeAt(i); return out; }
-function handleBoidsWS(m){
-  if (m.frameId !== frameId) return;
-  const bytes = base64ToBytes(m.base64).buffer;
-  applyBoidsSlice({ frameId:m.frameId, range:{start:m.start,count:m.count} }, bytes);
-  onSliceDone(m.id);
-  const p = workers.get(m.from); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
+function randPerm(n){
+  const arr=Array.from({length:n},(_,i)=>i);
+  for(let i=n-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+function mutateSwap(route){
+  const a=(Math.random()*route.length)|0, b=(Math.random()*route.length)|0;
+  [route[a],route[b]]=[route[b],route[a]];
+}
+function oxCrossover(p1,p2){
+  const n=p1.length, a=(Math.random()*n)|0, b=(Math.random()*n)|0;
+  const lo=Math.min(a,b), hi=Math.max(a,b);
+  const child=new Array(n).fill(-1);
+  for(let i=lo;i<=hi;i++) child[i]=p1[i];
+  let pos=(hi+1)%n;
+  for(let i=0;i<n;i++){
+    const gene=p2[(hi+1+i)%n];
+    if (!child.includes(gene)){
+      child[pos]=gene; pos=(pos+1)%n;
+    }
+  }
+  return child;
+}
+function tournament(pop, fit, k=3){
+  let best=-1, bestF=Infinity;
+  for(let i=0;i<k;i++){
+    const idx=(Math.random()*pop.length)|0;
+    if (fit[idx]<bestF){ bestF=fit[idx]; best=idx; }
+  }
+  return best;
 }
 
-/***** Binary packing (coord & worker) *****/
-function packState(p, v){
-  const buf = new ArrayBuffer((p.length + v.length) * 4);
-  const f = new Float32Array(buf);
-  f.set(p, 0);
-  f.set(v, p.length);
-  return buf;
-}
+/* Run a worker epoch: evolve local population & return elites */
+function runEpochLocal(p){
+  const cities = p.cities;
+  const N = cities.length;
+  const popSize = p.pop|0;
+  const gens = p.gens|0;
+  const mutProb = p.mutPct||0.05;
+  // seed population: some random, some from migrants
+  const migrants = (p.migrants||[]).slice(0, Math.min(20, popSize>>2)).map(e=>e.route.slice());
+  const pop = [];
+  for (const m of migrants){ pop.push(m.slice()); }
+  while (pop.length<popSize) pop.push(randPerm(N));
 
-/***** Boids physics (worker) *****/
-function boidsStepBinary(buf, range, par){
-  const f = new Float32Array(buf);
-  const n2 = f.length/2;
-  const Nloc = n2/2; // positions length /2 = N
-  const P = f.subarray(0, n2);
-  const V = f.subarray(n2);
+  const fit = new Array(pop.length);
+  const evalAll = ()=>{ for (let i=0;i<pop.length;i++) fit[i]=routeLen(pop[i], cities); };
+  evalAll();
 
-  const out = new Float32Array(range.count*4); // pos(count*2), vel(count*2)
-  const pr = par.perception, maxSpeed = par.maxSpeed, maxForce = par.maxForce;
-  const wA = par.wAlign, wC = par.wCoh, wS = par.wSep;
-
-  for (let idx=0; idx<range.count; idx++){
-    const i = range.start + idx;
-    const ix = P[i*2], iy = P[i*2+1];
-    const ivx = V[i*2], ivy = V[i*2+1];
-
-    let steerAx=0, steerAy=0, steerCx=0, steerCy=0, steerSx=0, steerSy=0;
-    let count=0, countS=0;
-
-    for (let j=0;j<Nloc;j++){
-      if (j===i) continue;
-      const jx=P[j*2], jy=P[j*2+1];
-      let dx = jx-ix, dy = jy-iy;
-      // toroidal wrap distance (wrap mode best-effort)
-      const wx = par.width, wy = par.height;
-      if (par.edgeMode==='wrap'){
-        if (dx >  wx/2) dx -= wx; else if (dx < -wx/2) dx += wx;
-        if (dy >  wy/2) dy -= wy; else if (dy < -wy/2) dy += wy;
-      }
-      const d2 = dx*dx + dy*dy;
-      if (d2 < pr*pr){
-        count++;
-        // alignment: sum neighbor velocities
-        steerAx += V[j*2]; steerAy += V[j*2+1];
-        // cohesion: sum neighbor positions
-        steerCx += jx; steerCy += jy;
-        // separation: away from close neighbors (stronger within half radius)
-        const d = Math.max(1e-4, Math.sqrt(d2));
-        const push = (pr/Math.max(d,1)) - 0.5;
-        if (push>0){ steerSx -= dx/d * push; steerSy -= dy/d * push; countS++; }
-      }
+  for (let g=0; g<gens; g++){
+    const next = [];
+    // elitism: keep the best 2
+    let idxs = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]).slice(0,2);
+    next.push(pop[idxs[0]].slice(), pop[idxs[1]].slice());
+    while (next.length < popSize){
+      const a = pop[tournament(pop,fit,3)], b = pop[tournament(pop,fit,3)];
+      let child = oxCrossover(a,b);
+      if (Math.random()<mutProb) mutateSwap(child);
+      next.push(child);
     }
-
-    // combine
-    let ax=0, ay=0;
-    if (count>0){
-      // alignment
-      let avx = (steerAx / count), avy = (steerAy / count);
-      [avx,avy] = limitVec(avx,avy,maxSpeed);
-      avx -= ivx; avy -= ivy;
-      [avx,avy] = limitVec(avx,avy,maxForce);
-      ax += wA*avx; ay += wA*avy;
-
-      // cohesion
-      let cx = (steerCx / count) - ix, cy = (steerCy / count) - iy;
-      [cx,cy] = limitVec(cx,cy,maxSpeed);
-      cx -= ivx; cy -= ivy;
-      [cx,cy] = limitVec(cx,cy,maxForce);
-      ax += wC*cx; ay += wC*cy;
-    }
-    if (countS>0){
-      let sx = steerSx / countS, sy = steerSy / countS;
-      [sx,sy] = limitVec(sx,sy,maxSpeed);
-      sx -= ivx; sy -= ivy;
-      [sx,sy] = limitVec(sx,sy,maxForce);
-      ax += wS*sx; ay += wS*sy;
-    }
-
-    // integrate
-    let nvx = ivx + ax, nvy = ivy + ay;
-    [nvx,nvy] = limitVec(nvx,nvy,maxSpeed);
-    let nx = ix + nvx, ny = iy + nvy;
-
-    // edges
-    if (par.edgeMode==='wrap'){
-      if (nx<0) nx+=par.width; if (nx>=par.width) nx-=par.width;
-      if (ny<0) ny+=par.height; if (ny>=par.height) ny-=par.height;
-    } else {
-      if (nx<0 || nx>=par.width){ nvx = -nvx; nx = Math.min(Math.max(nx,0),par.width-1); }
-      if (ny<0 || ny>=par.height){ nvy = -nvy; ny = Math.min(Math.max(ny,0),par.height-1); }
-    }
-
-    // write slice
-    out[idx*2] = nx; out[idx*2+1] = ny;
-    out[range.count*2 + idx*2] = nvx; out[range.count*2 + idx*2 +1] = nvy;
+    // replace and eval
+    pop.length=0; Array.prototype.push.apply(pop, next);
+    evalAll();
   }
 
-  return out.buffer;
-}
-function limitVec(x,y,max){
-  const m2 = x*x+y*y; if (m2>max*max){ const s = max/Math.sqrt(m2); return [x*s,y*s]; }
-  return [x,y];
-}
+  // elites
+  const order = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]);
+  const elites = order.slice(0, p.elites||5).map(i=>({ route: pop[i].slice(), len: fit[i] }));
+  const best = elites[0];
 
-// WS version (meta + base64 binary in/out)
-function boidsStepWS(p){
-  const out = boidsStepBinary(packState(p.P, p.V), p.range, p.par);
-  return bytesToBase64(new Uint8Array(out));
-}
-
-/***** Rendering (coord) *****/
-function drawBoids(){
-  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
-  ctx.fillStyle = "#eaeaf2";
-  for (let i=0;i<N;i++){
-    const x = pos[i*2], y = pos[i*2+1];
-    const vx = vel[i*2], vy = vel[i*2+1];
-    const ang = Math.atan2(vy,vx);
-    // tiny triangle
-    const size = 4;
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.rotate(ang);
-    ctx.beginPath();
-    ctx.moveTo(size,0);
-    ctx.lineTo(-size, size*0.6);
-    ctx.lineTo(-size, -size*0.6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
+  return { best, elites };
 }
 
 /***** UI *****/
@@ -626,7 +457,7 @@ $("#start").onclick = async () => {
     const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
     $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my swarm",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
+    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my GA cluster",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#qr").onclick = () => showQR(url);
     $("#open").onclick = () => { const w = window.open('about:blank'); if (w) w.location.href = url; };
     $("#open").disabled = false;
@@ -634,47 +465,53 @@ $("#start").onclick = async () => {
     setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url, peerId });
     setStatus("Room created. Waiting for workers to join…");
   } catch (e) {
-    setStatus("Failed to start: " + (e?.message||e));
-    $("#start").disabled=false;
+    setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
   }
 };
 
 $("#run").onclick = () => {
   if (!workers.size){ setStatus("No workers connected"); return; }
-  N = parseInt($("#numBoids").value,10);
-  pos = new Float32Array(N*2);
-  vel = new Float32Array(N*2);
-  for (let i=0;i<N;i++){
-    pos[i*2] = Math.random()*CANVAS_W; pos[i*2+1] = Math.random()*CANVAS_H;
-    const a = Math.random()*Math.PI*2, s = 1 + Math.random()*0.5;
-    vel[i*2] = Math.cos(a)*s; vel[i*2+1] = Math.sin(a)*s;
-  }
-  running = true; frameId = 0;
+  const n = parseInt($("#cities").value,10);
+  if ($("#reset").value==='yes' || CITY.length!==n){ genCities(n); BEST={route:null,len:Infinity}; draw(); }
+  running = true; epochNo=0; elitePool.length=0;
   $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false;
-  setStatus(`Swarm running with ${N} boids across ${workers.size} workers…`);
-  startFrame();
+  setStatus(`Optimizing TSP: ${n} cities • ${workers.size} workers`);
+  startEpoch();
 };
 
 $("#stop").onclick = () => {
-  running = false;
-  pendingJobs.length = 0;
-  setStatus("Swarm paused.");
-  $("#run").disabled=false; $("#stop").disabled=true;
+  running=false; pending.length=0; setStatus("Stopped."); $("#run").disabled=false; $("#stop").disabled=true;
 };
 
 $("#snapshot").onclick = () => {
-  const a = document.createElement('a');
-  a.download = `boids_${CANVAS_W}x${CANVAS_H}.png`;
-  a.href = canvas.toDataURL('image/png');
-  a.click();
+  const a=document.createElement('a'); a.download=`tsp_best_${CITY.length}.png`; a.href=canvas.toDataURL('image/png'); a.click();
 };
 
 function enableRunIfReady(){
   if (!isCoord) return;
   const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
   $("#run").disabled = !anyUsable;
-  if (anyUsable) setStatus('Ready. Tune controls and hit ▶️ Start Swarm.');
+  if (anyUsable) setStatus('Ready. Recruit workers and hit ▶️ Start.');
 }
+
+/***** Worker auto-join *****/
+(async ()=>{
+  const params = new URLSearchParams(location.hash.slice(1));
+  const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
+  roomId = rid; isCoord = (role !== 'worker');
+  setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
+  try {
+    await openSignaling(roomId);
+    if (!isCoord){
+      workerConn = new WorkerConn(); await workerConn.start();
+      setDebug({ SIGNAL_URL, roomId, role:'worker', peerId });
+      $("#start").disabled=true; $("#run").disabled=true;
+    } else {
+      setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
+      enableRunIfReady();
+    }
+  } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
+})();
 
 /***** QR *****/
 function showQR(data){
@@ -690,25 +527,6 @@ function showQR(data){
   const api = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(data);
   img.src = api;
 }
-
-/***** Auto-join as worker *****/
-(async ()=>{
-  const paramsURL = new URLSearchParams(location.hash.slice(1));
-  const rid = paramsURL.get('room'); const role = paramsURL.get('role'); if (!rid) return;
-  roomId = rid; isCoord = (role !== 'worker');
-  setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
-  try {
-    await openSignaling(roomId);
-    if (!isCoord){
-      workerConn = new WorkerConn(); await workerConn.start();
-      setDebug({ SIGNAL_URL, roomId, role:'worker', peerId });
-      $("#start").disabled=true; $("#run").disabled=true;
-    } else {
-      setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
-      enableRunIfReady();
-    }
-  } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
-})();
 </script>
 </body>
 </html>
