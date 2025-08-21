@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • P2P Fractal Renderer (Multi‑Worker, Binary, WS‑Fallback)</title>
+<title>NyxMesh • P2P Fractal Renderer (Multi-Worker, Binary, WS-Fallback)</title>
 <style>
   :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d}
   *{box-sizing:border-box} html,body{height:100%}
@@ -37,7 +37,7 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🚀 NyxMesh (Multi‑Worker)</h1>
+    <h1>🚀 NyxMesh (Multi-Worker)</h1>
     <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
     <div class="kv"><span>Workers</span><span id="workerCount" class="pill">0</span></div>
     <div class="kv"><span>Scheduler</span><span id="sched" class="pill">idle</span></div>
@@ -228,14 +228,21 @@ async function onSignal(m){
 
 /***** Coordinator: Peer wrapper *****/
 class Peer{
-  constructor(id){ this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle'; this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now(); this.pendingMeta=[]; this.offerRetry=null; }
+  constructor(id){ this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle'; this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now(); this.pendingMeta=[]; this.offerRetry=null; this._everConnected=false; }
   async maybeConnect(){
     if (this.pc || this.wsOnly) return;
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.onconnectionstatechange = () => {
       const s=this.pc.connectionState; this.state = s; refreshWorkersUI();
-      if (s==='connected'){ clearInterval(this.offerRetry); this.enableRenderIfReady(); }
-      if (s==='failed' || s==='closed' || s==='disconnected'){ if (!this._everConnected){ this.wsOnly = true; log('RTC failed for', this.id, '→ WS fallback'); } }
+      if (s==='connected'){ clearInterval(this.offerRetry); enableRenderIfReady(); }
+      if (s==='failed' || s==='closed' || s==='disconnected'){
+        if (!this._everConnected){
+          this.wsOnly = true;
+          log('RTC failed for', this.id, '→ WS fallback');
+          refreshWorkersUI();
+          enableRenderIfReady(); // ensure render allowed for WS-only peers
+        }
+      }
     };
     this.pc.oniceconnectionstatechange = () => refreshWorkersUI();
     this.pc.onicecandidate = (e) => { if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
@@ -257,7 +264,12 @@ class Peer{
   }
   async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected = true; }
   wireCtrl(){
-    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); };
+    this.ctrl.onopen = ()=>{
+      this.state='dc-open';
+      this._startPings();
+      refreshWorkersUI();
+      enableRenderIfReady(); // allow render as soon as control DC opens
+    };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
       if (m.type==='PONG'){ const rtt = Date.now()-m.t; this._rttEMA = this._rttEMA==null? rtt : (0.8*this._rttEMA + 0.2*rtt); this.rtt = Math.round(this._rttEMA); refreshWorkersUI(); }
@@ -283,7 +295,7 @@ class Peer{
     this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 5000);
   }
   canSend(){
-    return this.ctrl?.readyState==='open' && this.data?.readyState==='open' && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20);
+    return (this.wsOnly) || (this.ctrl?.readyState==='open' && this.data?.readyState==='open' && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20));
   }
   sendTask(tile, params){
     if (this.wsOnly){ // WS fallback
@@ -299,7 +311,16 @@ class Peer{
   }
 }
 
-function ensurePeer(id){ let p = workers.get(id); if (!p){ p = new Peer(id); workers.set(id,p); refreshWorkersUI(); } return p; }
+function ensurePeer(id){
+  let p = workers.get(id);
+  if (!p){
+    p = new Peer(id);
+    workers.set(id,p);
+    refreshWorkersUI();
+    enableRenderIfReady(); // as soon as we know of any worker, re-evaluate
+  }
+  return p;
+}
 
 /***** Worker side connection *****/
 let workerConn = null;
@@ -317,7 +338,7 @@ class WorkerConn{
   async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
   _onTask(msg){
     const { id, params } = msg; const { w,h,x0,y0,cx,cy,scale,maxIter,palette } = params;
-    // Compute off main thread? (future) – keeping inline for simplicity
+    // Compute off main thread? (future)
     const rgba = renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,palette);
     try{
       // Send meta then binary
@@ -338,7 +359,7 @@ function scheduleLoop(){
     if (!pendingTiles.length) break;
     let best=null, bestScore=Infinity;
     for(const p of workers.values()){
-      if (!p.canSend() && !p.wsOnly) continue; // allow WS-only always
+      if (!p.canSend()) continue;
       const score = (p.inflight || 0) + 0.003 * (p.rtt || 120);
       if (score < bestScore) { best = p; bestScore = score; }
     }
@@ -452,7 +473,12 @@ $("#preset1").onclick = () => { $("#cx").value=-0.75; $("#cy").value=0.0; $("#sc
 $("#preset2").onclick = () => { $("#cx").value=-0.7435; $("#cy").value=0.1314; $("#scale").value=0.0007; };
 $("#preset3").onclick = () => { $("#cx").value=0.285; $("#cy").value=0.01; $("#scale").value=0.0012; };
 
-function enableRenderIfReady(){ if (isCoord){ const anyOpen = [...workers.values()].some(p => p.ctrl?.readyState==='open' || p.wsOnly); if (anyOpen){ $("#render").disabled = false; } refreshWorkersUI(); } }
+function enableRenderIfReady(){
+  if (!isCoord) return;
+  const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
+  $("#render").disabled = !anyUsable;
+  if (anyUsable) setStatus('Ready to render. Choose settings and hit 🎨 Render.');
+}
 
 /***** QR (simple hosted API – lightweight) *****/
 function showQR(data){
@@ -475,7 +501,17 @@ function showQR(data){
   const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
   roomId = rid; isCoord = (role !== 'worker');
   setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
-  try { await openSignaling(roomId); if (!isCoord){ workerConn = new WorkerConn(); await workerConn.start(); setDebug({ SIGNAL_URL, roomId, role:'worker', peerId }); $("#start").disabled=true; $("#render").disabled=true; } else { setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId }); } }
+  try {
+    await openSignaling(roomId);
+    if (!isCoord){
+      workerConn = new WorkerConn(); await workerConn.start();
+      setDebug({ SIGNAL_URL, roomId, role:'worker', peerId });
+      $("#start").disabled=true; $("#render").disabled=true;
+    } else {
+      setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
+      enableRenderIfReady(); // evaluate once on load in case WS-only workers appear
+    }
+  }
   catch(e){ setStatus('Join failed: ' + e.message); }
 })();
 </script>
