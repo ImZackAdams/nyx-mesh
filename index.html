@@ -26,6 +26,7 @@
   .status{margin-top:10px;padding:8px;border-radius:8px;background:#1a1a24;border:1px solid #2a2a3a;font-size:13px}
   canvas{width:100%;height:auto;background:#0c0c14;border:1px solid #242436;border-radius:10px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid.single{grid-template-columns:1fr}
   label small{color:var(--muted);display:block;margin-top:4px}
   .workers{margin-top:6px;display:flex;flex-direction:column;gap:6px}
   .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #2b2b3a;border-radius:10px;background:#12121a}
@@ -92,16 +93,12 @@
       <label>Center Re <input id="cx" type="number" step="0.001" value="-0.75"/></label>
       <label>Center Im <input id="cy" type="number" step="0.001" value="0.0"/></label>
     </div>
-    <div class="grid" style="margin-top:8px">
+
+    <div class="grid single" style="margin-top:8px">
       <label>Scale
         <input id="scale" type="number" step="0.0001" value="0.0035"/>
         <small>Plane units per pixel (smaller = zoom in)</small>
       </label>
-      <div class="row">
-        <button id="preset1" class="btn secondary">Home</button>
-        <button id="preset2" class="btn secondary">Seahorse</button>
-        <button id="preset3" class="btn secondary">Elephant</button>
-      </div>
     </div>
 
     <div class="row" style="margin-top:10px;">
@@ -128,14 +125,15 @@
 
 <script>
 /***** CONFIG *****/
-const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://") + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost") + ":" + ((location.port && location.port !== "") ? location.port : "8080");
+const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
+  + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost")
+  + ":" + ((location.port && location.port !== "") ? location.port : "8080");
 let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 (() => {
   const u = new URL(location.href);
   const override = u.searchParams.get("signal");
   if (override) SIGNAL_URL = override;
 })();
-
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 const MAX_INFLIGHT_PER_WORKER = 6;
 const TILE_TIMEOUT_MS = 12000;
@@ -153,7 +151,6 @@ const peerId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10))
 let roomId = null, isCoord = false;
 let sig = null; // WebSocket
 let wsReady = false;
-let rtcEnabled = true; // per-worker fallback handled inside Peer objects
 let renderState = { inProgress:false, tilesTotal:0, tilesDone:0, jobId:null, startTime:0 };
 let CANVAS_W = 1024, CANVAS_H = 768;
 const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
@@ -177,9 +174,16 @@ function refreshWorkersUI(){
 /***** Signaling *****/
 function sigSend(obj){ if(sig && sig.readyState === WebSocket.OPEN) sig.send(JSON.stringify(obj)); }
 function openSignaling(id){
-  return new Promise((res, rej) => {
+  return new Promise((res) => {
     sig = new WebSocket(SIGNAL_URL);
-    sig.onopen = () => { wsReady = true; pill($("#sigState"), "open", "ok"); log("WS connected", SIGNAL_URL); sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' }); sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' }); res(); };
+    sig.onopen = () => {
+      wsReady = true;
+      pill($("#sigState"), "open", "ok");
+      log("WS connected", SIGNAL_URL);
+      sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' });
+      sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' });
+      res();
+    };
     sig.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } await onSignal(m); };
     sig.onerror = (err) => { log("WS error", err?.message||err); pill($("#sigState"), "error", "bad"); };
     sig.onclose = () => { wsReady = false; pill($("#sigState"), "closed", "bad"); };
@@ -187,10 +191,9 @@ function openSignaling(id){
 }
 
 async function onSignal(m){
-  // Ignore other rooms if server rooms are leaky
-  if (m.room && m.room !== roomId) return;
+  if (m.room && m.room !== roomId) return; // guard against noisy servers
 
-  // Worker-only tasks over WS fallback
+  // Worker-only WS fallback tasks
   if (!isCoord && m.type === 'TASK_WS' && m.to === peerId){
     const { id, kind, params } = m;
     if (kind === 'FRACTAL_TILE'){
@@ -202,18 +205,12 @@ async function onSignal(m){
   }
 
   if (isCoord){
-    // Learn about workers
     if (m.type === 'HELLO' && m.from && m.from !== peerId){ ensurePeer(m.from).maybeConnect(); return; }
     if (m.type === 'PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
-
-    // Signaling routing (ANSWER/ICE from workers)
     if (m.type === 'ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
     if (m.type === 'ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
-
-    // WS result fallback from worker
     if (m.type === 'RESULT_WS' && m.from){ const p = workers.get(m.from); if (p) handleResultWS(m); return; }
   } else {
-    // Worker side signaling (OFFER/ICE to me)
     if (m.type === 'OFFER' && (m.to===peerId || !m.to)){
       if (!workerConn) { workerConn = new WorkerConn(); await workerConn.start(); }
       await workerConn.acceptOffer(m.sdp, m.from);
@@ -228,7 +225,12 @@ async function onSignal(m){
 
 /***** Coordinator: Peer wrapper *****/
 class Peer{
-  constructor(id){ this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle'; this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now(); this.pendingMeta=[]; this.offerRetry=null; this._everConnected=false; }
+  constructor(id){
+    this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle';
+    this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0;
+    this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now();
+    this.pendingMeta=[]; this.offerRetry=null; this._everConnected=false;
+  }
   async maybeConnect(){
     if (this.pc || this.wsOnly) return;
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
@@ -240,7 +242,7 @@ class Peer{
           this.wsOnly = true;
           log('RTC failed for', this.id, '→ WS fallback');
           refreshWorkersUI();
-          enableRenderIfReady(); // ensure render allowed for WS-only peers
+          enableRenderIfReady(); // allow render with WS-only peers
         }
       }
     };
@@ -251,7 +253,7 @@ class Peer{
     this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
     this.data = this.pc.createDataChannel('data',{ordered:true});
     this.data.binaryType = 'arraybuffer';
-    this.data.bufferedAmountLowThreshold = 1<<20; // 1MB
+    this.data.bufferedAmountLowThreshold = 1<<20;
 
     this.wireCtrl(); this.wireData();
 
@@ -268,11 +270,16 @@ class Peer{
       this.state='dc-open';
       this._startPings();
       refreshWorkersUI();
-      enableRenderIfReady(); // allow render as soon as control DC opens
+      enableRenderIfReady(); // enable as soon as ctrl DC is open
     };
     this.ctrl.onmessage = (ev)=>{
       const m = JSON.parse(ev.data);
-      if (m.type==='PONG'){ const rtt = Date.now()-m.t; this._rttEMA = this._rttEMA==null? rtt : (0.8*this._rttEMA + 0.2*rtt); this.rtt = Math.round(this._rttEMA); refreshWorkersUI(); }
+      if (m.type==='PONG'){
+        const rtt = Date.now()-m.t;
+        this._rttEMA = this._rttEMA==null? rtt : (0.8*this._rttEMA + 0.2*rtt);
+        this.rtt = Math.round(this._rttEMA);
+        refreshWorkersUI();
+      }
       if (m.type==='RESULT_META'){ this.pendingMeta.push(m); }
     };
     this.ctrl.onclose = ()=>{ this.state='dc-closed'; refreshWorkersUI(); };
@@ -281,43 +288,43 @@ class Peer{
   wireData(){
     this.data.onopen = ()=>{ refreshWorkersUI(); };
     this.data.onmessage = (ev)=>{
-      // Match with last RESULT_META
       const meta = this.pendingMeta.shift();
       if (!meta){ log('WARN: data w/o meta from', this.id); return; }
       const bytes = new Uint8ClampedArray(ev.data);
       drawTileBytes(meta.tile, bytes);
       this.inflight = Math.max(0, this.inflight-1);
-      this._recvTiles++; const now = performance.now(); if (now - this._recvWindowStart > 1000){ this.tilesPerSec = this._recvTiles / ((now - this._recvWindowStart)/1000); this._recvTiles = 0; this._recvWindowStart = now; refreshWorkersUI(); }
+      this._recvTiles++;
+      const now = performance.now();
+      if (now - this._recvWindowStart > 1000){
+        this.tilesPerSec = this._recvTiles / ((now - this._recvWindowStart)/1000);
+        this._recvTiles = 0; this._recvWindowStart = now; refreshWorkersUI();
+      }
       onTileDone(meta.id);
     };
   }
-  _startPings(){
-    this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 5000);
-  }
+  _startPings(){ this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 5000); }
   canSend(){
-    return (this.wsOnly) || (this.ctrl?.readyState==='open' && this.data?.readyState==='open' && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20));
+    return (this.wsOnly) || (this.ctrl?.readyState==='open' && this.data?.readyState==='open'
+      && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20));
   }
   sendTask(tile, params){
-    if (this.wsOnly){ // WS fallback
+    if (this.wsOnly){
       sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:tile.id, kind:'FRACTAL_TILE', params});
-      this.inflight++;
-      return true;
+      this.inflight++; return true;
     }
     try{
       this.ctrl.send(JSON.stringify({ type:'TASK', id:tile.id, kind:'FRACTAL_TILE', params }));
-      this.inflight++;
-      return true;
+      this.inflight++; return true;
     }catch{ return false; }
   }
 }
-
 function ensurePeer(id){
   let p = workers.get(id);
   if (!p){
     p = new Peer(id);
     workers.set(id,p);
     refreshWorkersUI();
-    enableRenderIfReady(); // as soon as we know of any worker, re-evaluate
+    enableRenderIfReady(); // re-evaluate when any worker appears
   }
   return p;
 }
@@ -325,7 +332,7 @@ function ensurePeer(id){
 /***** Worker side connection *****/
 let workerConn = null;
 class WorkerConn{
-  constructor(){ this.pc=null; this.ctrl=null; this.data=null; this._pingTimer=null; }
+  constructor(){ this.pc=null; this.ctrl=null; this.data=null; }
   async start(){
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } else if (e.channel.label==='data'){ this.data=e.channel; this.data.binaryType='arraybuffer'; } };
@@ -333,15 +340,22 @@ class WorkerConn{
   }
   wireCtrl(){
     this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for tasks…'); };
-    this.ctrl.onmessage = (ev)=>{ const m = JSON.parse(ev.data); if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; } if (m.type==='TASK' && m.kind==='FRACTAL_TILE'){ this._onTask(m); } };
+    this.ctrl.onmessage = (ev)=>{
+      const m = JSON.parse(ev.data);
+      if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; }
+      if (m.type==='TASK' && m.kind==='FRACTAL_TILE'){ this._onTask(m); }
+    };
   }
-  async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
+  async acceptOffer(offer, from){
+    await this.pc.setRemoteDescription(offer);
+    const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans);
+    sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans });
+  }
   _onTask(msg){
-    const { id, params } = msg; const { w,h,x0,y0,cx,cy,scale,maxIter,palette } = params;
-    // Compute off main thread? (future)
+    const { id, params } = msg;
+    const { w,h,x0,y0,cx,cy,scale,maxIter,palette } = params;
     const rgba = renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,palette);
     try{
-      // Send meta then binary
       this.ctrl.send(JSON.stringify({ type:'RESULT_META', id, kind:'FRACTAL_TILE', tile:{x0,y0,w,h} }));
       this.data?.send(rgba.buffer);
     }catch(e){ log('Send error', e?.message||e); }
@@ -351,9 +365,16 @@ class WorkerConn{
 /***** Scheduler *****/
 let pendingTiles = [];
 const inFlightById = new Map();
-function planTiles(tile){ const a=[]; for(let y=0;y<CANVAS_H;y+=tile){ for(let x=0;x<CANVAS_W;x+=tile){ a.push({x0:x,y0:y,w:Math.min(tile,CANVAS_W-x),h:Math.min(tile,CANVAS_H-y)}); } } return a; }
+function planTiles(tile){
+  const a=[];
+  for(let y=0;y<CANVAS_H;y+=tile){
+    for(let x=0;x<CANVAS_W;x+=tile){
+      a.push({x0:x,y0:y,w:Math.min(tile,CANVAS_W-x),h:Math.min(tile,CANVAS_H-y)});
+    }
+  }
+  return a;
+}
 function scheduleLoop(){
-  // Compute a simple score: inflight + 0.003 * rtt; pick min repeatedly while capacity exists
   let madeProgress = false;
   for(let guard=0; guard< pendingTiles.length * 2; guard++){
     if (!pendingTiles.length) break;
@@ -365,7 +386,10 @@ function scheduleLoop(){
     }
     if (!best) break;
     const tile = pendingTiles.shift();
-    const [cx,cy,scale,maxIter,palette] = [parseFloat($("#cx").value), parseFloat($("#cy").value), parseFloat($("#scale").value), parseInt($("#maxIter").value,10), $("#palette").value];
+    const [cx,cy,scale,maxIter,palette] = [
+      parseFloat($("#cx").value), parseFloat($("#cy").value),
+      parseFloat($("#scale").value), parseInt($("#maxIter").value,10), $("#palette").value
+    ];
     const params = { x0:tile.x0, y0:tile.y0, w:tile.w, h:tile.h, cx, cy, scale, maxIter, palette };
     const ok = best.sendTask(tile, params);
     if (ok){
@@ -376,19 +400,23 @@ function scheduleLoop(){
   pill($("#sched"), pendingTiles.length? `queued ${pendingTiles.length}` : 'idle', pendingTiles.length? 'warn':'ok');
   if (madeProgress) refreshWorkersUI();
 }
-
 function onTileDone(id){
   renderState.tilesDone++;
-  const infl = inFlightById.get(id); if (infl){ const p = workers.get(infl.peer); if (p) { /* inflight decremented on data recv */ } inFlightById.delete(id); }
-  const pct=Math.round(100*renderState.tilesDone/renderState.tilesTotal); const elapsed=((Date.now()-renderState.startTime)/1000).toFixed(1);
+  const infl = inFlightById.get(id);
+  if (infl){ inFlightById.delete(id); }
+  const pct=Math.round(100*renderState.tilesDone/renderState.tilesTotal);
+  const elapsed=((Date.now()-renderState.startTime)/1000).toFixed(1);
   log(`Tile ${renderState.tilesDone}/${renderState.tilesTotal} (${pct}%) - ${elapsed}s`);
   setStatus(`Rendering: ${pct}%`);
-  if (renderState.tilesDone>=renderState.tilesTotal){ renderState.inProgress=false; $("#render").disabled=false; $("#cancel").disabled=true; $("#download").disabled=false; const total=((Date.now()-renderState.startTime)/1000).toFixed(1); setStatus(`Render complete ✓ (${total}s)`); }
-  // Try to dispatch more
+  if (renderState.tilesDone>=renderState.tilesTotal){
+    renderState.inProgress=false;
+    $("#render").disabled=false; $("#cancel").disabled=true; $("#download").disabled=false;
+    const total=((Date.now()-renderState.startTime)/1000).toFixed(1);
+    setStatus(`Render complete ✓ (${total}s)`);
+  }
   scheduleLoop();
 }
-
-// Timeout requeue
+// Requeue stale tiles
 setInterval(()=>{
   const now = Date.now();
   for (const [id, rec] of [...inFlightById]){
@@ -419,10 +447,20 @@ function renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,paletteName){
       const X = cx + (x0 + px - CANVAS_W/2) * scale;
       const Y = cy + (y0 + py - CANVAS_H/2) * scale;
       let zr=0, zi=0, iter=0;
-      while (zr*zr + zi*zi <= 4 && iter < maxIter){ const zr2 = zr*zr - zi*zi + X; zi = 2*zr*zi + Y; zr = zr2; iter++; }
+      while (zr*zr + zi*zi <= 4 && iter < maxIter){
+        const zr2 = zr*zr - zi*zi + X;
+        zi = 2*zr*zi + Y;
+        zr = zr2;
+        iter++;
+      }
       let r,g,b;
       if (iter===maxIter){ r=g=b=0; }
-      else { const zn=Math.hypot(zr,zi); const nu=Math.log2(Math.log(zn)); const sm=Math.min(1, Math.max(0,(iter+1-nu)/maxIter)); [r,g,b]=pick(sm); }
+      else {
+        const zn=Math.hypot(zr,zi);
+        const nu=Math.log2(Math.log(zn));
+        const sm=Math.min(1, Math.max(0,(iter+1-nu)/maxIter));
+        [r,g,b]=pick(sm);
+      }
       const i=(py*w+px)*4; bytes[i]=r; bytes[i+1]=g; bytes[i+2]=b; bytes[i+3]=255;
     }
   }
@@ -430,15 +468,21 @@ function renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,paletteName){
 }
 
 /***** Base64 helpers (WS fallback only) *****/
-function bytesToBase64(bytes){ let binary=""; const CHUNK=0x8000; for(let i=0;i<bytes.length;i+=CHUNK){ binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length))); } return btoa(binary); }
+function bytesToBase64(bytes){
+  let binary=""; const CHUNK=0x8000;
+  for(let i=0;i<bytes.length;i+=CHUNK){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length)));
+  }
+  return btoa(binary);
+}
 function base64ToBytes(b64){ const bin=atob(b64); const len=bin.length; const out=new Uint8ClampedArray(len); for(let i=0;i<len;i++) out[i]=bin.charCodeAt(i); return out; }
-
 function handleResultWS(m){ drawTileBytes(m.tile, base64ToBytes(m.base64)); onTileDone(m.id); const p = workers.get(m.from); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); } }
 
 /***** UI *****/
 $("#start").onclick = async () => {
   try {
-    $("#start").disabled = true; isCoord = true; roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
+    $("#start").disabled = true; isCoord = true;
+    roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
     setStatus("Creating room…"); await openSignaling(roomId);
     const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
@@ -450,7 +494,10 @@ $("#start").onclick = async () => {
 
     setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url, peerId });
     setStatus("Room created. Waiting for workers to join…");
-  } catch (e) { setStatus("Failed to start: " + e.message); $("#start").disabled=false; }
+  } catch (e) {
+    setStatus("Failed to start: " + (e?.message||e));
+    $("#start").disabled=false;
+  }
 };
 
 $("#render").onclick = () => {
@@ -466,12 +513,12 @@ $("#render").onclick = () => {
   scheduleLoop();
 };
 
-$("#download").onclick = () => { const a = document.createElement('a'); a.download = `mandelbrot_${CANVAS_W}x${CANVAS_H}.png`; a.href = canvas.toDataURL('image/png'); a.click(); };
-
-// Presets
-$("#preset1").onclick = () => { $("#cx").value=-0.75; $("#cy").value=0.0; $("#scale").value=0.0035; };
-$("#preset2").onclick = () => { $("#cx").value=-0.7435; $("#cy").value=0.1314; $("#scale").value=0.0007; };
-$("#preset3").onclick = () => { $("#cx").value=0.285; $("#cy").value=0.01; $("#scale").value=0.0012; };
+$("#download").onclick = () => {
+  const a = document.createElement('a');
+  a.download = `mandelbrot_${CANVAS_W}x${CANVAS_H}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+};
 
 function enableRenderIfReady(){
   if (!isCoord) return;
@@ -509,10 +556,9 @@ function showQR(data){
       $("#start").disabled=true; $("#render").disabled=true;
     } else {
       setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId });
-      enableRenderIfReady(); // evaluate once on load in case WS-only workers appear
+      enableRenderIfReady(); // evaluate once on load
     }
-  }
-  catch(e){ setStatus('Join failed: ' + e.message); }
+  } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
 })();
 </script>
 </body>
