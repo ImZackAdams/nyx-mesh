@@ -3,47 +3,52 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • P2P Fractal Renderer (WS Relay)</title>
+<title>NyxMesh • P2P Fractal Renderer (Multi‑Worker, Binary, WS‑Fallback)</title>
 <style>
-  :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;}
+  :root{--bg:#0b0b0f;--panel:#16161d;--ink:#eaeaf2;--muted:#a7a7b3;--accent:#9b5cff;--accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d}
   *{box-sizing:border-box} html,body{height:100%}
   body{margin:0;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 10% 0%,#141421 0%,var(--bg) 60%);color:var(--ink);display:flex;justify-content:center;padding:18px}
-  .wrap{width:100%;max-width:1100px;display:grid;grid-template-columns:360px 1fr;gap:14px}
+  .wrap{width:100%;max-width:1200px;display:grid;grid-template-columns:380px 1fr;gap:14px}
   .card{background:var(--panel);border:1px solid #222231;border-radius:14px;padding:14px}
-  h1{margin:0 0 8px;font-size:18px} h2{margin:0 0 10px;font-size:15px;color:var(--muted)}
+  h1{margin:0 0 8px;font-size:18px} h2{margin:12px 0 10px;font-size:15px;color:var(--muted)}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .btn{background:var(--accent);color:#0b0b0f;border:0;padding:8px 12px;border-radius:10px;font-weight:700;cursor:pointer;transition:.2s}
   .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
-  .btn:disabled{opacity:0.5;cursor:not-allowed}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
   .btn.secondary{background:#2a2a38;color:var(--ink);border:1px solid #333349}
+  .btn.ghost{background:transparent;border:1px dashed #333349;color:var(--muted)}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   input,select,textarea{width:100%;background:#0f0f16;color:#0ef;border:1px solid #282838;border-radius:8px;padding:10px}
   .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#24243a;color:var(--ink);font-size:12px}
-  .ok{background:#1d3d23;color:#7dff8b}.warn{background:#3d3d1d;color:#ffe57d}.bad{background:#3d1d1d;color:#ff7d7d}
+  .ok{background:#1d3d23;color:var(--good)}.warn{background:#3d3d1d;color:var(--warn)}.bad{background:#3d1d1d;color:var(--bad)}
   .log{height:220px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
   .status{margin-top:10px;padding:8px;border-radius:8px;background:#1a1a24;border:1px solid #2a2a3a;font-size:13px}
   canvas{width:100%;height:auto;background:#0c0c14;border:1px solid #242436;border-radius:10px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   label small{color:var(--muted);display:block;margin-top:4px}
-  @media (max-width: 768px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
+  .workers{margin-top:6px;display:flex;flex-direction:column;gap:6px}
+  .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #2b2b3a;border-radius:10px;background:#12121a}
+  .muted{color:var(--muted)}
+  .caps{font-variant:all-small-caps;letter-spacing:.04em}
+  @media (max-width: 860px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🚀 NyxMesh (WS Relay)</h1>
-    <div class="kv"><span>Connection</span><span id="pc" class="pill">idle</span></div>
-    <div class="kv"><span>ICE</span><span id="ice" class="pill">idle</span></div>
-    <div class="kv"><span>Channel</span><span id="dc" class="pill">idle</span></div>
-    <div class="kv"><span>Latency</span><span id="lat" class="pill">—</span></div>
+    <h1>🚀 NyxMesh (Multi‑Worker)</h1>
+    <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
+    <div class="kv"><span>Workers</span><span id="workerCount" class="pill">0</span></div>
+    <div class="kv"><span>Scheduler</span><span id="sched" class="pill">idle</span></div>
 
     <h2>Session</h2>
     <div class="row"><button id="start" class="btn">Start Session</button></div>
     <div class="row" style="margin-top:8px">
       <input id="invite" class="mono" placeholder="Invite link appears here" readonly />
-      <button id="copy" class="btn secondary">Copy</button>
-      <button id="share" class="btn secondary">Share</button>
+      <button id="copy" class="btn secondary" title="Copy link">Copy</button>
+      <button id="share" class="btn secondary" title="Share link">Share</button>
+      <button id="qr" class="btn secondary" title="Show QR">QR</button>
       <button id="open" class="btn secondary" title="Open worker tab" disabled>Open worker</button>
     </div>
     <div class="status" id="status">Create a session and send the link to workers.</div>
@@ -102,7 +107,11 @@
     <div class="row" style="margin-top:10px;">
       <button id="render" class="btn" disabled>🎨 Render</button>
       <button id="cancel" class="btn secondary" disabled>Cancel</button>
+      <button id="download" class="btn ghost" disabled>Download PNG</button>
     </div>
+
+    <h2>Workers</h2>
+    <div id="workers" class="workers"></div>
 
     <h2>Debug</h2>
     <textarea id="debug" rows="6" class="mono" readonly></textarea>
@@ -118,21 +127,20 @@
 </div>
 
 <script>
-/*** CONFIG ***/
-const SIGNAL_URL =
-  (location.protocol === "https:" ? "wss://" : "ws://") +
-  ((location.hostname && location.hostname !== "") ? location.hostname : "localhost") +
-  ":" + ((location.port && location.port !== "") ? location.port : "8080");
-// For sanity, allow manual override via ?signal=ws://host:port
+/***** CONFIG *****/
+const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://") + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost") + ":" + ((location.port && location.port !== "") ? location.port : "8080");
+let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 (() => {
   const u = new URL(location.href);
   const override = u.searchParams.get("signal");
-  if (override) window.SIGNAL_URL = override;
+  if (override) SIGNAL_URL = override;
 })();
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+const MAX_INFLIGHT_PER_WORKER = 6;
+const TILE_TIMEOUT_MS = 12000;
 
-/*** DOM helpers ***/
+/***** DOM helpers *****/
 const $ = s => document.querySelector(s);
 function pill(el, text, cls){ el.textContent = text; el.className = "pill " + (cls||""); }
 function setStatus(msg){ $("#status").textContent = msg; }
@@ -140,107 +148,251 @@ function setDebug(o){ $("#debug").value = JSON.stringify(o, null, 2); }
 const logEl = $("#log");
 function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${a.join(" ")}\n`; logEl.scrollTop = logEl.scrollHeight; }
 
-/*** Signaling ***/
-let sig = null, roomId = null, isCoord = false;
+/***** Global state *****/
+const peerId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
+let roomId = null, isCoord = false;
+let sig = null; // WebSocket
+let wsReady = false;
+let rtcEnabled = true; // per-worker fallback handled inside Peer objects
+let renderState = { inProgress:false, tilesTotal:0, tilesDone:0, jobId:null, startTime:0 };
+let CANVAS_W = 1024, CANVAS_H = 768;
+const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
+
+/***** Workers UI *****/
+const workers = new Map(); // peerId -> Peer
+function refreshWorkersUI(){
+  $("#workerCount").textContent = String(workers.size);
+  const host = $("#workers"); host.innerHTML = "";
+  for (const p of workers.values()){
+    const el = document.createElement('div'); el.className = 'worker'; el.id = `w-${p.id}`;
+    el.innerHTML = `
+      <div class="mono">${p.id.slice(0,8)} <span class="muted caps">${p.wsOnly? 'ws-only' : p.state}</span></div>
+      <div class="pill ${p.rtt<80?'ok':p.rtt<200?'warn':'bad'}" title="RTT">${p.rtt? p.rtt+"ms":"—"}</div>
+      <div class="pill" title="In flight">${p.inflight}</div>
+      <div class="pill" title="Tiles/sec">${p.tilesPerSec.toFixed(1)}</div>`;
+    host.appendChild(el);
+  }
+}
+
+/***** Signaling *****/
 function sigSend(obj){ if(sig && sig.readyState === WebSocket.OPEN) sig.send(JSON.stringify(obj)); }
 function openSignaling(id){
   return new Promise((res, rej) => {
     sig = new WebSocket(SIGNAL_URL);
-    sig.onopen = () => { log("WS connected", SIGNAL_URL); sigSend({ type:"JOIN", room:id }); };
-    sig.onmessage = async (e) => {
-      let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.type === "JOINED") { log("Joined room", id); res(); return; }
-      await onSignal(m);
-    };
-    sig.onerror = (err) => { log("WS error", err?.message||err); rej(err); };
-    sig.onclose = () => { log("WS closed"); pill($("#pc"), "disconnected", "bad"); };
+    sig.onopen = () => { wsReady = true; pill($("#sigState"), "open", "ok"); log("WS connected", SIGNAL_URL); sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' }); sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' }); res(); };
+    sig.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } await onSignal(m); };
+    sig.onerror = (err) => { log("WS error", err?.message||err); pill($("#sigState"), "error", "bad"); };
+    sig.onclose = () => { wsReady = false; pill($("#sigState"), "closed", "bad"); };
   });
 }
 
-/*** Global canvas dims ***/
-let CANVAS_W = 1024, CANVAS_H = 768;
+async function onSignal(m){
+  // Ignore other rooms if server rooms are leaky
+  if (m.room && m.room !== roomId) return;
 
-/*** WebRTC ***/
-class Conn {
-  constructor(role){ this.role=role; this.pc=null; this.dc=null; this._pingTimer=null; }
-  async start(){
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-    this.pc.onconnectionstatechange = () => {
-      const s=this.pc.connectionState; pill($("#pc"), s, s==="connected"?"ok":(["failed","closed"].includes(s)?"bad":"warn")); log("PC:", s);
-    };
-    this.pc.oniceconnectionstatechange = () => {
-      const s=this.pc.iceConnectionState; pill($("#ice"), s, (s==="connected"||s==="completed")?"ok":(["failed","disconnected"].includes(s)?"bad":"warn"));
-    };
-    this.pc.onicecandidate = (e) => { if(e.candidate) sigSend({ type:"ICE", room:roomId, candidate:e.candidate }); };
-    if (this.role === "coordinator") { this.dc = this.pc.createDataChannel("mesh",{ordered:true,maxRetransmits:3}); this.wireDC(this.dc); }
-    else { this.pc.ondatachannel = (e) => { this.dc = e.channel; this.wireDC(this.dc); }; }
-  }
-  wireDC(dc){
-    dc.onopen = () => {
-      pill($("#dc"), "open", "ok");
-      if (this.role === "coordinator") $("#render").disabled = false;
-      $("#cancel").disabled = false;
-      setStatus(this.role === "coordinator" ? "Connected. Ready to render." : "Connected. Waiting for tasks…");
-      log("DC open");
-      stopOfferRetries();
-      this._pingTimer = setInterval(()=>this.ping(), 5000);
-    };
-    dc.onclose = () => { pill($("#dc"), "closed", "bad"); $("#render").disabled = true; $("#cancel").disabled = true; log("DC closed"); clearInterval(this._pingTimer); };
-    dc.onerror = (e) => { pill($("#dc"), "error", "bad"); log("DC error:", e?.message||e); };
-    dc.onmessage = (ev) => this.onMsg(ev);
-  }
-  send(obj){ if (this.dc?.readyState==="open") this.dc.send(JSON.stringify(obj)); }
-  ping(){ this.send({ type:"PING", t: Date.now() }); }
-  async onMsg(ev){
-    const m = JSON.parse(ev.data);
-    if (m.type === "PING") this.send({ type:"PONG", t:m.t });
-    else if (m.type === "PONG") { const rtt = Date.now()-m.t; pill($("#lat"), `${rtt}ms`, rtt<60?"ok":"warn"); }
-    else if (m.type === "TASK" && m.kind === "FRACTAL_TILE") {
-      const { w,h,x0,y0,cx,cy,scale,maxIter,palette } = m.params;
-      const rgba = renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,palette);
+  // Worker-only tasks over WS fallback
+  if (!isCoord && m.type === 'TASK_WS' && m.to === peerId){
+    const { id, kind, params } = m;
+    if (kind === 'FRACTAL_TILE'){
+      const rgba = renderMandelbrotTile(params.w, params.h, params.x0, params.y0, params.cx, params.cy, params.scale, params.maxIter, params.palette);
       const b64 = bytesToBase64(rgba);
-      this.send({ type:"RESULT", id:m.id, kind:"FRACTAL_TILE", tile:{x0,y0,w,h}, base64:b64, ms:rgba.timeMs });
-      log(`tile done (${w}×${h}) @(${x0},${y0}) ${rgba.timeMs}ms`);
-    } else if (m.type === "RESULT" && isCoord && m.kind === "FRACTAL_TILE") {
-      drawTile(m);
+      sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id, kind:'FRACTAL_TILE', tile:{x0:params.x0,y0:params.y0,w:params.w,h:params.h}, base64:b64 });
+    }
+    return;
+  }
+
+  if (isCoord){
+    // Learn about workers
+    if (m.type === 'HELLO' && m.from && m.from !== peerId){ ensurePeer(m.from).maybeConnect(); return; }
+    if (m.type === 'PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
+
+    // Signaling routing (ANSWER/ICE from workers)
+    if (m.type === 'ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
+    if (m.type === 'ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
+
+    // WS result fallback from worker
+    if (m.type === 'RESULT_WS' && m.from){ const p = workers.get(m.from); if (p) handleResultWS(m); return; }
+  } else {
+    // Worker side signaling (OFFER/ICE to me)
+    if (m.type === 'OFFER' && (m.to===peerId || !m.to)){
+      if (!workerConn) { workerConn = new WorkerConn(); await workerConn.start(); }
+      await workerConn.acceptOffer(m.sdp, m.from);
+      return;
+    }
+    if (m.type === 'ICE' && (m.to===peerId || !m.to)){
+      try { await workerConn?.pc?.addIceCandidate(m.candidate); } catch {}
+      return;
     }
   }
-  async makeOffer(){ const offer=await this.pc.createOffer(); await this.pc.setLocalDescription(offer); sigSend({ type:"OFFER", room:roomId, sdp:offer }); log("Offer sent"); }
-  async acceptOffer(offer){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:"ANSWER", room:roomId, sdp:ans }); log("Answer sent"); }
-  async acceptAnswer(answer){ await this.pc.setRemoteDescription(answer); log("Answer accepted"); }
-}
-let conn=null;
-
-/*** Offer retries ***/
-let offerRetryTimer=null;
-function startOfferRetries(){
-  stopOfferRetries();
-  offerRetryTimer = setInterval(async ()=>{
-    if (!isCoord || !conn?.pc) return;
-    if (conn.pc.connectionState === "connected" || conn.pc.remoteDescription?.type === "answer") { stopOfferRetries(); return; }
-    try { await conn.makeOffer(); log("Offer retry"); } catch {}
-  }, 3000);
-}
-function stopOfferRetries(){ if (offerRetryTimer){ clearInterval(offerRetryTimer); offerRetryTimer=null; } }
-
-/*** Signaling messages ***/
-async function onSignal(m){
-  if (!conn) return;
-  if (m.type === "PEER_JOINED" && isCoord) { log("Peer joined → send offer"); try { await conn.makeOffer(); } catch {} return; }
-  if (m.type === "OFFER" && !isCoord) { log("Got OFFER"); await conn.acceptOffer(m.sdp); }
-  else if (m.type === "ANSWER" && isCoord) { log("Got ANSWER"); await conn.acceptAnswer(m.sdp); stopOfferRetries(); }
-  else if (m.type === "ICE") { try { await conn.pc.addIceCandidate(m.candidate); } catch(e) { /* ignore benign */ } }
 }
 
-/*** Fractal core ***/
+/***** Coordinator: Peer wrapper *****/
+class Peer{
+  constructor(id){ this.id=id; this.pc=null; this.ctrl=null; this.data=null; this.state='idle'; this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.wsOnly=false; this.tilesPerSec=0; this._recvTiles=0; this._recvWindowStart=performance.now(); this.pendingMeta=[]; this.offerRetry=null; }
+  async maybeConnect(){
+    if (this.pc || this.wsOnly) return;
+    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
+    this.pc.onconnectionstatechange = () => {
+      const s=this.pc.connectionState; this.state = s; refreshWorkersUI();
+      if (s==='connected'){ clearInterval(this.offerRetry); this.enableRenderIfReady(); }
+      if (s==='failed' || s==='closed' || s==='disconnected'){ if (!this._everConnected){ this.wsOnly = true; log('RTC failed for', this.id, '→ WS fallback'); } }
+    };
+    this.pc.oniceconnectionstatechange = () => refreshWorkersUI();
+    this.pc.onicecandidate = (e) => { if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
+
+    // Data channels
+    this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
+    this.data = this.pc.createDataChannel('data',{ordered:true});
+    this.data.binaryType = 'arraybuffer';
+    this.data.bufferedAmountLowThreshold = 1<<20; // 1MB
+
+    this.wireCtrl(); this.wireData();
+
+    const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
+    sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:offer });
+    this.offerRetry = setInterval(async()=>{
+      if (this.pc?.connectionState==='connected' || this.pc?.remoteDescription?.type==='answer') { clearInterval(this.offerRetry); return; }
+      try{ const o = await this.pc.createOffer(); await this.pc.setLocalDescription(o); sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:o }); log('Offer retry →', this.id); }catch{}
+    }, 3000);
+  }
+  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); this._everConnected = true; }
+  wireCtrl(){
+    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); };
+    this.ctrl.onmessage = (ev)=>{
+      const m = JSON.parse(ev.data);
+      if (m.type==='PONG'){ const rtt = Date.now()-m.t; this._rttEMA = this._rttEMA==null? rtt : (0.8*this._rttEMA + 0.2*rtt); this.rtt = Math.round(this._rttEMA); refreshWorkersUI(); }
+      if (m.type==='RESULT_META'){ this.pendingMeta.push(m); }
+    };
+    this.ctrl.onclose = ()=>{ this.state='dc-closed'; refreshWorkersUI(); };
+    this.ctrl.onerror = ()=>{ this.state='dc-error'; refreshWorkersUI(); };
+  }
+  wireData(){
+    this.data.onopen = ()=>{ refreshWorkersUI(); };
+    this.data.onmessage = (ev)=>{
+      // Match with last RESULT_META
+      const meta = this.pendingMeta.shift();
+      if (!meta){ log('WARN: data w/o meta from', this.id); return; }
+      const bytes = new Uint8ClampedArray(ev.data);
+      drawTileBytes(meta.tile, bytes);
+      this.inflight = Math.max(0, this.inflight-1);
+      this._recvTiles++; const now = performance.now(); if (now - this._recvWindowStart > 1000){ this.tilesPerSec = this._recvTiles / ((now - this._recvWindowStart)/1000); this._recvTiles = 0; this._recvWindowStart = now; refreshWorkersUI(); }
+      onTileDone(meta.id);
+    };
+  }
+  _startPings(){
+    this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 5000);
+  }
+  canSend(){
+    return this.ctrl?.readyState==='open' && this.data?.readyState==='open' && this.inflight < MAX_INFLIGHT_PER_WORKER && this.data.bufferedAmount < (4<<20);
+  }
+  sendTask(tile, params){
+    if (this.wsOnly){ // WS fallback
+      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:tile.id, kind:'FRACTAL_TILE', params});
+      this.inflight++;
+      return true;
+    }
+    try{
+      this.ctrl.send(JSON.stringify({ type:'TASK', id:tile.id, kind:'FRACTAL_TILE', params }));
+      this.inflight++;
+      return true;
+    }catch{ return false; }
+  }
+}
+
+function ensurePeer(id){ let p = workers.get(id); if (!p){ p = new Peer(id); workers.set(id,p); refreshWorkersUI(); } return p; }
+
+/***** Worker side connection *****/
+let workerConn = null;
+class WorkerConn{
+  constructor(){ this.pc=null; this.ctrl=null; this.data=null; this._pingTimer=null; }
+  async start(){
+    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
+    this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } else if (e.channel.label==='data'){ this.data=e.channel; this.data.binaryType='arraybuffer'; } };
+    this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
+  }
+  wireCtrl(){
+    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for tasks…'); };
+    this.ctrl.onmessage = (ev)=>{ const m = JSON.parse(ev.data); if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; } if (m.type==='TASK' && m.kind==='FRACTAL_TILE'){ this._onTask(m); } };
+  }
+  async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
+  _onTask(msg){
+    const { id, params } = msg; const { w,h,x0,y0,cx,cy,scale,maxIter,palette } = params;
+    // Compute off main thread? (future) – keeping inline for simplicity
+    const rgba = renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,palette);
+    try{
+      // Send meta then binary
+      this.ctrl.send(JSON.stringify({ type:'RESULT_META', id, kind:'FRACTAL_TILE', tile:{x0,y0,w,h} }));
+      this.data?.send(rgba.buffer);
+    }catch(e){ log('Send error', e?.message||e); }
+  }
+}
+
+/***** Scheduler *****/
+let pendingTiles = [];
+const inFlightById = new Map();
+function planTiles(tile){ const a=[]; for(let y=0;y<CANVAS_H;y+=tile){ for(let x=0;x<CANVAS_W;x+=tile){ a.push({x0:x,y0:y,w:Math.min(tile,CANVAS_W-x),h:Math.min(tile,CANVAS_H-y)}); } } return a; }
+function scheduleLoop(){
+  // Compute a simple score: inflight + 0.003 * rtt; pick min repeatedly while capacity exists
+  let madeProgress = false;
+  for(let guard=0; guard< pendingTiles.length * 2; guard++){
+    if (!pendingTiles.length) break;
+    let best=null, bestScore=Infinity;
+    for(const p of workers.values()){
+      if (!p.canSend() && !p.wsOnly) continue; // allow WS-only always
+      const score = (p.inflight || 0) + 0.003 * (p.rtt || 120);
+      if (score < bestScore) { best = p; bestScore = score; }
+    }
+    if (!best) break;
+    const tile = pendingTiles.shift();
+    const [cx,cy,scale,maxIter,palette] = [parseFloat($("#cx").value), parseFloat($("#cy").value), parseFloat($("#scale").value), parseInt($("#maxIter").value,10), $("#palette").value];
+    const params = { x0:tile.x0, y0:tile.y0, w:tile.w, h:tile.h, cx, cy, scale, maxIter, palette };
+    const ok = best.sendTask(tile, params);
+    if (ok){
+      inFlightById.set(tile.id, { tile, peer:best.id, ts:Date.now() });
+      madeProgress = true;
+    } else { pendingTiles.unshift(tile); break; }
+  }
+  pill($("#sched"), pendingTiles.length? `queued ${pendingTiles.length}` : 'idle', pendingTiles.length? 'warn':'ok');
+  if (madeProgress) refreshWorkersUI();
+}
+
+function onTileDone(id){
+  renderState.tilesDone++;
+  const infl = inFlightById.get(id); if (infl){ const p = workers.get(infl.peer); if (p) { /* inflight decremented on data recv */ } inFlightById.delete(id); }
+  const pct=Math.round(100*renderState.tilesDone/renderState.tilesTotal); const elapsed=((Date.now()-renderState.startTime)/1000).toFixed(1);
+  log(`Tile ${renderState.tilesDone}/${renderState.tilesTotal} (${pct}%) - ${elapsed}s`);
+  setStatus(`Rendering: ${pct}%`);
+  if (renderState.tilesDone>=renderState.tilesTotal){ renderState.inProgress=false; $("#render").disabled=false; $("#cancel").disabled=true; $("#download").disabled=false; const total=((Date.now()-renderState.startTime)/1000).toFixed(1); setStatus(`Render complete ✓ (${total}s)`); }
+  // Try to dispatch more
+  scheduleLoop();
+}
+
+// Timeout requeue
+setInterval(()=>{
+  const now = Date.now();
+  for (const [id, rec] of [...inFlightById]){
+    if (now - rec.ts > TILE_TIMEOUT_MS){
+      log('Timeout → requeue', id);
+      const t = rec.tile; t.id = `re_${Math.random().toString(36).slice(2,8)}`;
+      pendingTiles.push(t);
+      inFlightById.delete(id);
+      const p = workers.get(rec.peer); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); }
+    }
+  }
+  if (pendingTiles.length) scheduleLoop();
+}, 1000);
+
+/***** Canvas + drawing *****/
+function resizeCanvas(w,h){ canvas.width=w; canvas.height=h; CANVAS_W=w; CANVAS_H=h; ctx.fillStyle="#0c0c14"; ctx.fillRect(0,0,w,h); }
+function drawTileBytes(tile, bytes){ const {x0,y0,w,h} = tile; const img=new ImageData(bytes,w,h); ctx.putImageData(img,x0,y0); }
+
+/***** Fractal core (CPU JS) *****/
 function renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,paletteName){
   const bytes = new Uint8ClampedArray(w*h*4);
-  const t0 = performance.now();
   const colorClassic = t => [Math.floor(9*(1-t)*t*t*t*255), Math.floor(15*(1-t)*(1-t)*t*t*255), Math.floor(8.5*(1-t)*(1-t)*(1-t)*t*255)];
   const colorFire = t => [Math.floor(255*t), Math.floor(120*Math.sqrt(t)), Math.floor(40*t*t)];
   const colorIce = t => [Math.floor(40*t*t), Math.floor(140*t), Math.floor(255*Math.sqrt(t))];
   const pick = paletteName==="fire"?colorFire:paletteName==="ice"?colorIce:colorClassic;
-
   for(let py=0; py<h; py++){
     for(let px=0; px<w; px++){
       const X = cx + (x0 + px - CANVAS_W/2) * scale;
@@ -253,88 +405,78 @@ function renderMandelbrotTile(w,h,x0,y0,cx,cy,scale,maxIter,paletteName){
       const i=(py*w+px)*4; bytes[i]=r; bytes[i+1]=g; bytes[i+2]=b; bytes[i+3]=255;
     }
   }
-  bytes.timeMs = Math.round(performance.now() - t0);
   return bytes;
 }
 
-/*** Base64 helpers ***/
-function bytesToBase64(bytes){
-  let binary=""; const CHUNK=0x8000;
-  for(let i=0;i<bytes.length;i+=CHUNK){ binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length))); }
-  return btoa(binary);
-}
+/***** Base64 helpers (WS fallback only) *****/
+function bytesToBase64(bytes){ let binary=""; const CHUNK=0x8000; for(let i=0;i<bytes.length;i+=CHUNK){ binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length))); } return btoa(binary); }
 function base64ToBytes(b64){ const bin=atob(b64); const len=bin.length; const out=new Uint8ClampedArray(len); for(let i=0;i<len;i++) out[i]=bin.charCodeAt(i); return out; }
 
-/*** Canvas + tiling ***/
-const canvas = $("#canvas"); const ctx = canvas.getContext("2d");
-let renderState = { inProgress:false, tilesTotal:0, tilesDone:0, currentJob:null, startTime:0 };
-function resizeCanvas(w,h){ canvas.width=w; canvas.height=h; CANVAS_W=w; CANVAS_H=h; ctx.fillStyle="#0c0c14"; ctx.fillRect(0,0,w,h); }
-function planTiles(tile){ const a=[]; for(let y=0;y<CANVAS_H;y+=tile){ for(let x=0;x<CANVAS_W;x+=tile){ a.push({x0:x,y0:y,w:Math.min(tile,CANVAS_W-x),h:Math.min(tile,CANVAS_H-y)}); } } return a; }
-function drawTile(msg){
-  const {x0,y0,w,h}=msg.tile; const bytes=base64ToBytes(msg.base64); const img=new ImageData(bytes,w,h); ctx.putImageData(img,x0,y0);
-  renderState.tilesDone++; const pct=Math.round(100*renderState.tilesDone/renderState.tilesTotal); const elapsed=((Date.now()-renderState.startTime)/1000).toFixed(1);
-  log(`Tile ${renderState.tilesDone}/${renderState.tilesTotal} (${pct}%) - ${elapsed}s`);
-  setStatus(`Rendering: ${pct}%`);
-  if (renderState.tilesDone>=renderState.tilesTotal){ renderState.inProgress=false; $("#render").disabled=false; $("#cancel").disabled=true; const total=((Date.now()-renderState.startTime)/1000).toFixed(1); setStatus(`Render complete ✓ (${total}s)`); }
-}
+function handleResultWS(m){ drawTileBytes(m.tile, base64ToBytes(m.base64)); onTileDone(m.id); const p = workers.get(m.from); if (p){ p.inflight = Math.max(0, p.inflight-1); refreshWorkersUI(); } }
 
-/*** UI ***/
+/***** UI *****/
 $("#start").onclick = async () => {
   try {
-    $("#start").disabled = true;
-    isCoord = true;
-    roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
-    setStatus("Creating room…");
-    await openSignaling(roomId);
-    const url = location.origin + location.pathname + "#room=" + roomId;
+    $("#start").disabled = true; isCoord = true; roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
+    setStatus("Creating room…"); await openSignaling(roomId);
+    const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
     $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
     $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my session",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#open").onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    $("#qr").onclick = () => showQR(url);
+    $("#open").onclick = () => { const w = window.open('about:blank'); if (w) w.location.href = url; };
     $("#open").disabled = false;
 
-    conn = new Conn("coordinator");
-    await conn.start();
-    await conn.makeOffer();
-    startOfferRetries();
-    setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url });
-    setStatus("Room created. Waiting for worker to join…");
+    setDebug({ SIGNAL_URL, roomId, role:"coordinator", invite:url, peerId });
+    setStatus("Room created. Waiting for workers to join…");
   } catch (e) { setStatus("Failed to start: " + e.message); $("#start").disabled=false; }
 };
 
 $("#render").onclick = () => {
-  if (!conn?.dc || conn.dc.readyState!=="open") { setStatus("Not connected to worker"); return; }
+  if (!workers.size){ setStatus("No workers connected"); return; }
   const [w,h] = $("#res").value.split("x").map(Number);
   const tileSize = parseInt($("#tile").value,10);
-  const maxIter = parseInt($("#maxIter").value,10);
-  const palette = $("#palette").value;
-  const cx = parseFloat($("#cx").value);
-  const cy = parseFloat($("#cy").value);
-  const scale = parseFloat($("#scale").value);
   resizeCanvas(w,h);
-  const tiles = planTiles(tileSize);
-  renderState = { inProgress:true, tilesTotal:tiles.length, tilesDone:0, currentJob:Math.random().toString(36).slice(2,10), startTime:Date.now() };
+  const tiles = planTiles(tileSize).map((t,i)=> ({...t, id:`tile_${Math.random().toString(36).slice(2,8)}_${i}`}));
+  renderState = { inProgress:true, tilesTotal:tiles.length, tilesDone:0, jobId:Math.random().toString(36).slice(2,10), startTime:Date.now() };
   setStatus(`Starting render: ${w}×${h}, ${tiles.length} tiles…`);
-  $("#render").disabled=true; $("#cancel").disabled=true; // (no cancel logic hooked to worker in this version)
-  tiles.forEach((t,i) => {
-    const id = `tile_${renderState.currentJob}_${i}`;
-    const params = { x0:t.x0, y0:t.y0, w:t.w, h:t.h, cx, cy, scale, maxIter, palette };
-    conn.send({ type:"TASK", id, kind:"FRACTAL_TILE", params });
-  });
+  $("#render").disabled=true; $("#cancel").disabled=true; $("#download").disabled=true;
+  pendingTiles = tiles;
+  scheduleLoop();
 };
+
+$("#download").onclick = () => { const a = document.createElement('a'); a.download = `mandelbrot_${CANVAS_W}x${CANVAS_H}.png`; a.href = canvas.toDataURL('image/png'); a.click(); };
 
 // Presets
 $("#preset1").onclick = () => { $("#cx").value=-0.75; $("#cy").value=0.0; $("#scale").value=0.0035; };
 $("#preset2").onclick = () => { $("#cx").value=-0.7435; $("#cy").value=0.1314; $("#scale").value=0.0007; };
 $("#preset3").onclick = () => { $("#cx").value=0.285; $("#cy").value=0.01; $("#scale").value=0.0012; };
 
-/*** Auto-join as worker ***/
+function enableRenderIfReady(){ if (isCoord){ const anyOpen = [...workers.values()].some(p => p.ctrl?.readyState==='open' || p.wsOnly); if (anyOpen){ $("#render").disabled = false; } refreshWorkersUI(); } }
+
+/***** QR (simple hosted API – lightweight) *****/
+function showQR(data){
+  let div = document.getElementById('qrModal'); if (!div){
+    div = document.createElement('div'); div.id='qrModal'; div.style.position='fixed'; div.style.inset='0'; div.style.background='rgba(0,0,0,.6)'; div.style.display='grid'; div.style.placeItems='center'; div.style.zIndex='9999';
+    const inner = document.createElement('div'); inner.style.background='#12121a'; inner.style.border='1px solid #2b2b3a'; inner.style.borderRadius='12px'; inner.style.padding='14px'; inner.style.textAlign='center';
+    const img = document.createElement('img'); img.id='qrImg'; img.width=220; img.height=220; img.alt='QR'; img.style.borderRadius='10px'; img.style.background='#fff';
+    const p = document.createElement('div'); p.className='mono'; p.style.wordBreak='break-all'; p.style.marginTop='8px'; p.textContent=data;
+    const c = document.createElement('button'); c.className='btn secondary'; c.textContent='Close'; c.onclick=()=>div.remove();
+    inner.appendChild(img); inner.appendChild(p); inner.appendChild(c); div.appendChild(inner); document.body.appendChild(div);
+  }
+  const img = document.getElementById('qrImg');
+  const api = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(data);
+  img.src = api;
+}
+
+/***** Auto-join as worker *****/
 (async ()=>{
-  const p = new URLSearchParams(location.hash.slice(1));
-  const rid = p.get("room"); if (!rid) return;
-  roomId = rid; isCoord = false; setStatus("Joining room as worker…"); log("Join as worker:", roomId);
-  try { await openSignaling(roomId); conn = new Conn("worker"); await conn.start(); setStatus("Worker ready. Waiting for tasks…"); setDebug({ SIGNAL_URL, roomId, role:"worker" }); $("#start").disabled=true; $("#render").disabled=true; }
-  catch(e){ setStatus("Join failed: " + e.message); }
+  const params = new URLSearchParams(location.hash.slice(1));
+  const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
+  roomId = rid; isCoord = (role !== 'worker');
+  setStatus(isCoord? 'Coordinator mode' : 'Joining room as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
+  try { await openSignaling(roomId); if (!isCoord){ workerConn = new WorkerConn(); await workerConn.start(); setDebug({ SIGNAL_URL, roomId, role:'worker', peerId }); $("#start").disabled=true; $("#render").disabled=true; } else { setDebug({ SIGNAL_URL, roomId, role:'coordinator', peerId }); } }
+  catch(e){ setStatus('Join failed: ' + e.message); }
 })();
 </script>
 </body>
