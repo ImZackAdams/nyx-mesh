@@ -1,6 +1,6 @@
 # NyxMesh
 
-**Your cloud bill’s worst enemy: distributed compute in index.html.r**
+**Your cloud bill’s worst enemy: distributed compute in an index.html.**
 
 NyxMesh turns your browser into a distributed compute node.  
 No backend. No accounts. No deploy. Just open the HTML file and start trading compute tasks over WebRTC.
