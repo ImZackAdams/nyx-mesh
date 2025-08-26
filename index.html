@@ -169,7 +169,7 @@
         <button id="mrSetRemote" class="btn btn-secondary">Set Remote</button>
         <span id="mrState" class="status-badge status-idle">idle</span>
       </div>
-      <div style="font-size:12px;color:var(--muted)">Tip: run via http://localhost (not file://). On Zoom, paste blobs in chat.</div>
+      <div style="font-size:12px;color:var(--muted)">Tip: on GitHub Pages, use this manual panel or set a custom SIGNAL_URL.</div>
     </div>
 
     <!-- Active Nodes -->
@@ -209,6 +209,7 @@ function makeId(len = 16) {
   return (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, len);
 }
 const safeClone = (obj) => JSON.parse(JSON.stringify(obj));
+const withTimeout = (p, ms = 2000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 
 /* ==== Core State ==== */
 const peerId = makeId(16);
@@ -219,10 +220,13 @@ let optimizationRunning = false;
 let optimizationInterval = null;
 const nodes = new Map(); // id -> NetworkPeer (coordinator view)
 
-/* ==== Networking config (optional) ==== */
-const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
+/* ==== Networking config (GH Pages aware) ==== */
+const IS_GH_PAGES = /\.github\.io$/.test(location.hostname);
+const DEFAULT_SIGNAL_URL = IS_GH_PAGES ? null : (
+  (location.protocol === "https:" ? "wss://" : "ws://")
   + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost")
-  + ":" + ((location.port && location.port !== "") ? location.port : "8080");
+  + ":" + ((location.port && location.port !== "") ? location.port : "8080")
+);
 let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -335,6 +339,21 @@ class NetworkPeer {
 
 /* ==== Signaling helpers ==== */
 function connectToSignalServer() {
+  // If we intentionally disabled WS (e.g., GitHub Pages), fall back immediately.
+  if (!SIGNAL_URL) {
+    if (broadcastChannel) {
+      localFallbackMode = true;
+      updateNetworkStatus('active', 'Local Demo Mode');
+      log('📱 Using local BroadcastChannel (no server needed)');
+      broadcastChannel.onmessage = (event) => handleSignalMessage(event.data);
+      return Promise.resolve();
+    }
+    // No BC available: just resolve; manual WebRTC will still work.
+    updateNetworkStatus('idle', 'No signaling server (okay)');
+    log('ℹ️ No signaling server configured; use Manual WebRTC');
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     try {
       signalSocket = new WebSocket(SIGNAL_URL);
@@ -357,7 +376,7 @@ function connectToSignalServer() {
         }
       };
     } catch (error) {
-      // If constructor throws (e.g., file://), fallback immediately
+      // Fallback if constructor throws
       if (broadcastChannel) {
         localFallbackMode = true;
         updateNetworkStatus('active', 'Local Demo Mode');
@@ -373,17 +392,18 @@ function connectToSignalServer() {
       updateNetworkStatus('active', 'Local Demo Mode');
       log('📱 Using local BroadcastChannel (no server needed)');
       broadcastChannel.onmessage = (event) => handleSignalMessage(event.data);
+    } else {
+      updateNetworkStatus('idle', 'No signaling server (okay)');
+      log('ℹ️ No signaling server detected — use Manual WebRTC panel');
     }
   });
 }
 
 function sendSignal(message) {
-  // Ensure structured-clone-safe payloads
   let m = { ...message, from: peerId, sessionId };
   if (m.type === 'ice' && m.candidate && typeof m.candidate.toJSON === 'function') {
     m.candidate = m.candidate.toJSON();
   }
-  // Deep clone to avoid DOM objects slipping through
   m = safeClone(m);
   if (localFallbackMode && broadcastChannel) {
     broadcastChannel.postMessage(m);
@@ -396,7 +416,6 @@ async function handleSignalMessage(message) {
   if (message.sessionId !== sessionId) return;
   switch (message.type) {
     case 'peer_joined': {
-      // In local bc-mode, skip auto-RTC; use Manual WebRTC panel instead.
       if (localFallbackMode) {
         log('📱 Peer joined (local mode) — use Manual WebRTC to connect');
         updateMetrics();
@@ -679,39 +698,37 @@ function performOptimizationStep(cities, params) {
 
 /* ==== Demo session management ==== */
 async function startDemoSession() {
-  try {
-    sessionId = makeId(24);
-    isCoordinator = true; demoRunning = true;
-    updateNetworkStatus('connecting', 'Starting Session...');
-    try {
-      await connectToSignalServer();
-      log('🚀 Networking hooks ready');
-      log(`📡 Signaling: ${localFallbackMode ? 'Local BroadcastChannel' : 'WebSocket Server'}`);
-    } catch (error) {
-      updateNetworkStatus('idle', 'No signaling server (okay)');
-      log('ℹ️ No signaling server detected — use Manual WebRTC panel');
-    }
-    log(`Session ID: ${sessionId.slice(0, 8)}`);
-    const inviteUrl = `${window.location.origin}${window.location.pathname}#join=${sessionId}`;
-    elements.inviteUrl.textContent = inviteUrl;
-    elements.inviteSection.style.display = 'block';
+  // Prepare session & UI immediately (avoids GH Pages WS hang)
+  sessionId = makeId(24);
+  isCoordinator = true; demoRunning = true;
+  updateNetworkStatus('connecting', 'Starting Session...');
+  elements.startDemo.disabled = true;
+  elements.runOptimization.disabled = false;
+  elements.stopDemo.disabled = false;
 
-    elements.startDemo.disabled = true;
-    elements.runOptimization.disabled = false;
-    elements.stopDemo.disabled = false;
-    computeMetrics.startTime = Date.now();
+  // Try signaling, but don't block UI
+  try {
+    await withTimeout(connectToSignalServer(), 2000);
+    log('🚀 Networking hooks ready');
+    log(`📡 Signaling: ${localFallbackMode ? 'Local BroadcastChannel' : (SIGNAL_URL ? 'WebSocket Server' : 'Disabled')}`);
   } catch (error) {
-    updateNetworkStatus('idle', 'Failed to Start');
-    log(`❌ Failed to start session: ${error.message}`);
-    elements.startDemo.disabled = false;
+    updateNetworkStatus(localFallbackMode ? 'active' : 'idle', localFallbackMode ? 'Local Demo Mode' : 'No signaling server (okay)');
+    log('ℹ️ Signaling unavailable — use Manual WebRTC panel');
   }
+
+  log(`Session ID: ${sessionId.slice(0, 8)}`);
+  const inviteUrl = `${window.location.origin}${window.location.pathname}#join=${sessionId}`;
+  elements.inviteUrl.textContent = inviteUrl;
+  elements.inviteSection.style.display = 'block';
+  computeMetrics.startTime = Date.now();
 }
+
 async function joinAsWorker(joinSessionId) {
   try {
     sessionId = joinSessionId; isCoordinator = false; demoRunning = true;
     updateNetworkStatus('connecting', 'Joining Session...');
     log(`🔗 Joining session: ${sessionId.slice(0, 8)}`);
-    await connectToSignalServer();
+    await withTimeout(connectToSignalServer(), 2000);
     sendSignal({ type: 'peer_joined', from: peerId });
     updateNetworkStatus('active', 'Connected as Compute Node');
     log('✅ Successfully joined as compute node');
@@ -750,7 +767,6 @@ function stopDemoSession() {
 
 function startOptimization() {
   if (optimizationRunning) {
-    // Stop the current optimization
     optimizationRunning = false;
     if (optimizationInterval) {
       clearInterval(optimizationInterval);
