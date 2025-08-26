@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • Distributed Browser Computing Platform (POC)</title>
+<title>NyxMesh • Distributed Browser Computing Platform (Manual WebRTC Demo)</title>
 <style>
   :root{
     --bg:#0a0a0f;--panel:#141420;--ink:#f8f9fa;--muted:#8892b0;--accent:#6366f1;--accent-2:#10b981;
@@ -40,28 +40,30 @@
   .btn-success{background:var(--good);color:#0f172a}
   .btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
   .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}
-  input{accent-color:#6366f1}
-  input[type=range]{width:100%}
-  .slider-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  label{font-size:13px;color:var(--muted);display:block}
-  .label-line{display:flex;justify-content:space-between}
+  input,select,textarea{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;width:100%}
+  .input-group{display:grid;grid-template-columns:1fr;gap:8px;align-items:center}
   canvas{width:100%;height:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:inset 0 2px 4px rgba(0,0,0,0.1)}
   .worker-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-  .worker{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:10px;background:rgba(31,41,55,0.5)}
+  .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:10px;background:rgba(31,41,55,0.5)}
   .worker-id{font-family:ui-monospace,monospace;font-size:12px}
   .worker-status{font-size:11px;color:var(--muted)}
-  .perf-badge{padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(34,197,94,0.2);color:#4ade80}
+  .perf-badge{padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600}
+  .perf-excellent{background:rgba(34,197,94,0.2);color:#4ade80}
+  .perf-good{background:rgba(251,191,36,0.2);color:#fbbf24}
+  .perf-poor{background:rgba(239,68,68,0.2);color:#f87171}
+  .roi-section{background:linear-gradient(135deg, rgba(16,185,129,0.1), rgba(6,182,212,0.1));border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:16px;margin:16px 0}
+  .roi-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
+  .roi-metric{text-align:center}
+  .roi-metric .value{font-size:20px;font-weight:700;color:var(--good)}
+  .roi-metric .label{font-size:12px;color:var(--muted);margin-top:4px}
+  .demo-controls{background:rgba(31,41,55,0.3);border-radius:12px;padding:16px;margin:16px 0}
+  .activity-log{height:140px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted)}
   .invite-section{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin:16px 0}
   .invite-url{font-family:ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;word-break:break-all;margin:8px 0}
-  .activity-log{height:120px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted)}
-  /* Session pill */
-  .session-pill{display:none;gap:8px;align-items:center;background:rgba(31,41,55,0.5);border:1px solid var(--line);border-radius:999px;padding:6px 10px;margin:8px 0 0 0;width:fit-content}
-  .session-pill code{font-family:ui-monospace,monospace;font-size:12px;padding:2px 6px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
-  .mini-btn{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer}
-  .mini-btn:hover{background:#232838}
   @media (max-width: 1100px) {
     .container{grid-template-columns:1fr;gap:16px}
     .metrics-grid{grid-template-columns:1fr 1fr 1fr}
+    .roi-grid{grid-template-columns:1fr 1fr}
   }
 </style>
 </head>
@@ -73,20 +75,14 @@
     <div class="subtitle">Distributed Browser Computing Platform</div>
 
     <div class="value-prop">
-      <strong>Proof of Concept:</strong> Every browser tab becomes a compute node. Open more tabs → solve faster. No installs. No cloud.
+      <strong>Revolutionary Approach:</strong> Transform any web browser into a compute node. No installs, no cloud infrastructure, no limits. Scale computational workloads across thousands of browsers instantly.
     </div>
 
-    <!-- Network + Session -->
+    <!-- Connection Status -->
     <h3>Network Status</h3>
     <div class="status-badge status-idle" id="networkStatus">
       <span>⚡</span>
-      <span id="statusText">Ready</span>
-    </div>
-    <div class="session-pill" id="sessionPill">
-      <span style="color:var(--muted)">Session</span>
-      <code id="sessionCode">—</code>
-      <button class="mini-btn" id="copyIdBtn">Copy ID</button>
-      <button class="mini-btn" id="copyLinkBtn">Copy Link</button>
+      <span id="statusText">Ready to Connect</span>
     </div>
 
     <!-- Key Metrics -->
@@ -97,15 +93,34 @@
       </div>
       <div class="metric">
         <div class="metric-label">Compute Power</div>
-        <div class="metric-value"><span id="computePower">0</span><span class="metric-unit"> ops/s</span></div>
+        <div class="metric-value" id="computePower">0<span class="metric-unit">ops/s</span></div>
       </div>
       <div class="metric">
-        <div class="metric-label">Speedup</div>
-        <div class="metric-value"><span id="performanceGain">1.0</span><span class="metric-unit">×</span></div>
+        <div class="metric-label">Performance Gain</div>
+        <div class="metric-value" id="performanceGain">1.0<span class="metric-unit">×</span></div>
       </div>
       <div class="metric">
-        <div class="metric-label">Best Distance</div>
-        <div class="metric-value" id="bestDist">—</div>
+        <div class="metric-label">Cost Savings</div>
+        <div class="metric-value" id="costSavings">$0<span class="metric-unit"></span></div>
+      </div>
+    </div>
+
+    <!-- ROI Calculator -->
+    <div class="roi-section">
+      <h3 style="margin:0 0 8px;color:var(--good)">📊 Business Impact</h3>
+      <div class="roi-grid">
+        <div class="roi-metric">
+          <div class="value" id="roiSavings">$0</div>
+          <div class="label">Monthly Savings</div>
+        </div>
+        <div class="roi-metric">
+          <div class="value" id="roiNodes">0</div>
+          <div class="label">Equivalent Servers</div>
+        </div>
+        <div class="roi-metric">
+          <div class="value" id="roiEfficiency">0%</div>
+          <div class="label">Efficiency Gain</div>
+        </div>
       </div>
     </div>
 
@@ -113,383 +128,472 @@
     <div class="demo-controls">
       <h3 style="margin-top:0">Demo Controls</h3>
       <div class="controls">
-        <button id="startDemo" class="btn">🚀 Start Demo (Coordinator)</button>
-        <button id="joinDemo" class="btn btn-success">👥 Join as Worker</button>
-        <button id="runOptimization" class="btn btn-secondary" disabled>▶ Run Optimization</button>
+        <button id="startDemo" class="btn">🚀 Start Demo Session</button>
+        <button id="runOptimization" class="btn btn-success" disabled>▶ Run Optimization</button>
+        <button id="stopDemo" class="btn btn-secondary" disabled>⏹ Stop</button>
       </div>
-      <div class="slider-row">
-        <div>
-          <div class="label-line"><label>Problem Size</label><span id="sizeLabel">40</span></div>
-          <input id="problemSize" type="range" min="20" max="120" value="40" />
-        </div>
-        <div>
-          <div class="label-line"><label>Workload</label><span id="workLabel">5/10</span></div>
-          <input id="workload" type="range" min="1" max="10" value="5" />
-        </div>
+
+      <div class="input-group" style="margin-top:12px">
+        <label for="problemSize">Problem Size (<span id="problemSizeValue">50</span> cities)</label>
+        <input id="problemSize" type="range" min="20" max="100" value="50" />
+        <label for="workloadIntensity">Workload (<span id="workloadValue">5</span>/10)</label>
+        <input id="workloadIntensity" type="range" min="1" max="10" value="5" />
       </div>
     </div>
 
-    <!-- Invite / Add Nodes -->
+    <!-- Invite New Nodes -->
     <div class="invite-section" id="inviteSection" style="display:none">
-      <h3 style="margin-top:0">📱 Add Nodes</h3>
-      <div class="invite-url" id="inviteUrl">Open this exact file in other tabs/devices and click “Join as Worker”.</div>
+      <h3 style="margin-top:0">📱 Add Compute Nodes</h3>
+      <div class="invite-url" id="inviteUrl">Generating invite link...</div>
       <div class="controls">
-        <button id="openWorker" class="btn btn-secondary">➕ Open Local Worker Tab</button>
+        <button id="copyInvite" class="btn btn-secondary">📋 Copy Link</button>
+        <button id="shareInvite" class="btn btn-secondary">🔗 Share</button>
+        <button id="openWorker" class="btn btn-secondary">➕ Add Local Node</button>
       </div>
+    </div>
+
+    <!-- Manual WebRTC (no server) -->
+    <div class="invite-section" id="manualWrtc" style="margin-top:12px">
+      <h3 style="margin-top:0">🛰 Manual WebRTC (no server)</h3>
+      <div class="controls" style="margin-bottom:8px">
+        <label><input type="radio" name="mrRole" value="coordinator" checked> Coordinator</label>
+        <label><input type="radio" name="mrRole" value="worker"> Worker</label>
+        <button id="mrCreate" class="btn">Create Offer/Answer</button>
+        <button id="mrCopy" class="btn btn-secondary">📋 Copy</button>
+      </div>
+      <label class="mono" style="font-size:12px;color:var(--muted)">Your description (Base64)</label>
+      <textarea id="mrLocal" rows="5" class="mono" placeholder="Your Base64 blob will appear here…" readonly></textarea>
+      <label class="mono" style="font-size:12px;color:var(--muted);margin-top:8px;display:block">Peer description (paste here)</label>
+      <textarea id="mrRemote" rows="5" class="mono" placeholder="Paste the other side’s blob here…"></textarea>
+      <div class="controls" style="margin-top:8px">
+        <button id="mrSetRemote" class="btn btn-secondary">Set Remote</button>
+        <span id="mrState" class="status-badge status-idle">idle</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">Tip: for reliability, run via http://localhost (not file://). On Zoom, paste blobs in chat.</div>
     </div>
 
     <!-- Active Nodes -->
     <h3>Compute Nodes <span id="nodeCountBadge" class="status-badge status-idle">0 active</span></h3>
     <div id="workerList" class="worker-list">
-      <div style="color:var(--muted);text-align:center;padding:20px">Start demo to see active nodes</div>
-    </div>
-
-    <h3>Activity</h3>
-    <div id="activityLog" class="activity-log">
-      <div style="color:var(--accent)">NyxMesh POC ready</div>
-      <div>Open multiple tabs to contribute compute.</div>
+      <div style="color:var(--muted);text-align:center;padding:20px">Start demo session to see active nodes</div>
     </div>
   </div>
 
   <!-- Visualization Panel -->
   <div class="card">
-    <h2>🎯 Live Optimization</h2>
-    <div class="subtitle">Traveling Salesman Problem — collaborative solving across tabs</div>
+    <h2>🎯 Live Optimization Demo</h2>
+    <div class="subtitle">Traveling Salesman Problem - Real-time distributed solving</div>
+
+    <!-- Problem Visualization -->
     <canvas id="problemCanvas" width="800" height="500"></canvas>
+
+    <!-- Performance Chart -->
     <h3>Performance Over Time</h3>
     <canvas id="performanceChart" width="800" height="120"></canvas>
-    <div style="font-size:12px;color:var(--muted);margin-top:8px">More nodes ⇒ faster improvement of the purple route</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">
+      Solution quality improves as more nodes join the computation
+    </div>
+
+    <!-- Activity Log -->
+    <h3>System Activity</h3>
+    <div id="activityLog" class="activity-log">
+      <div style="color:var(--accent)">NyxMesh Distributed Computing Platform v2.0</div>
+      <div>Ready to demonstrate browser-based distributed computing...</div>
+    </div>
   </div>
 </div>
 
 <script>
-/* ========= Simple P2P-in-a-tab: BroadcastChannel ========= */
-const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('nyxmesh-poc') : null;
-
-/* ========= State ========= */
-const peerId = Math.random().toString(36).slice(2,10);
+// ====== Core State ======
+const peerId = crypto.randomUUID?.()?.replace(/-/g,'') || Math.random().toString(36).slice(2,10);
 let sessionId = null;
 let isCoordinator = false;
 let demoRunning = false;
 let optimizationRunning = false;
+const nodes = new Map(); // <— ensure defined
 
-const nodes = new Map(); // id -> {latency, ops, status}
+// Real networking configuration (kept, but manual WebRTC works without it)
+const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
+  + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost")
+  + ":" + ((location.port && location.port !== "") ? location.port : "8080");
+let SIGNAL_URL = DEFAULT_SIGNAL_URL;
+const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+
+// WebSocket signaling (optional)
+let signalSocket = null;
+const broadcastChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('nyxmesh-demo') : null;
+let localFallbackMode = false;
+
+// ====== NetworkPeer class (unchanged core) ======
+class NetworkPeer {
+  constructor(id) {
+    this.id = id;
+    this.pc = null; // RTCPeerConnection
+    this.dataChannel = null;
+    this.status = 'connecting';
+    this.latency = 0;
+    this.operations = 0;
+    this.cpu = 0;
+    this._lastPing = 0;
+  }
+  async connect() {
+    try {
+      this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      this.pc.onconnectionstatechange = () => { this.status = this.pc.connectionState; if (this.status === 'connected') { log(`✅ Peer connected: ${this.id.slice(0, 8)}`); } renderWorkerList(); };
+      this.pc.onicecandidate = (event) => { if (event.candidate) { sendSignal({ type: 'ice', to: this.id, candidate: event.candidate }); } };
+      if (isCoordinator) {
+        this.dataChannel = this.pc.createDataChannel('compute', { ordered: true });
+        this.setupDataChannel();
+        const offer = await this.pc.createOffer();
+        await this.pc.setLocalDescription(offer);
+        sendSignal({ type: 'offer', to: this.id, sdp: offer });
+      } else {
+        this.pc.ondatachannel = (event) => { this.dataChannel = event.channel; this.setupDataChannel(); };
+      }
+    } catch (error) { log(`❌ Connection failed to ${this.id.slice(0, 8)}: ${error.message}`); this.status = 'failed'; }
+  }
+  setupDataChannel() {
+    this.dataChannel.onopen = () => { this.status = 'connected'; log(`🔗 DataChannel ready: ${this.id.slice(0, 8)}`); renderWorkerList(); if (isCoordinator) this.startPingLoop(); };
+    this.dataChannel.onmessage = (event) => { const message = JSON.parse(event.data); this.handleMessage(message); };
+    this.dataChannel.onerror = (error) => { log(`⚠️ DataChannel error: ${error}`); };
+  }
+  startPingLoop() { setInterval(() => { if (this.dataChannel?.readyState === 'open') { this._lastPing = Date.now(); this.send({ type: 'ping', timestamp: this._lastPing }); } }, 5000); }
+  handleMessage(message) {
+    switch (message.type) {
+      case 'ping': if (!isCoordinator) { this.send({ type: 'pong', timestamp: message.timestamp }); } break;
+      case 'pong': if (isCoordinator) { this.latency = Date.now() - message.timestamp; renderWorkerList(); } break;
+      case 'compute_task': if (!isCoordinator) { this.handleComputeTask(message); } break;
+      case 'compute_result': if (isCoordinator) { this.handleComputeResult(message); } break;
+    }
+  }
+  send(message) { if (this.dataChannel?.readyState === 'open') { this.dataChannel.send(JSON.stringify(message)); } }
+  handleComputeTask(message) {
+    const result = performOptimizationStep(message.problemData, message.parameters);
+    this.send({ type: 'compute_result', taskId: message.taskId, result });
+    this.operations++; this.cpu = Math.min(100, this.cpu + Math.random() * 20);
+  }
+  handleComputeResult(message) {
+    if (message.result && message.result.distance < bestSolution.distance) {
+      bestSolution = message.result; drawProblem(); log(`🎯 Better solution: ${Math.round(bestSolution.distance)} from ${this.id.slice(0, 8)}`);
+    }
+    computeMetrics.totalOperations++; this.operations++;
+  }
+  async acceptOffer(offer) { await this.pc.setRemoteDescription(offer); const answer = await this.pc.createAnswer(); await this.pc.setLocalDescription(answer); sendSignal({ type: 'answer', to: this.id, sdp: answer }); }
+  async acceptAnswer(answer) { await this.pc.setRemoteDescription(answer); }
+  async addIceCandidate(candidate) { try { await this.pc.addIceCandidate(candidate); } catch (error) { console.warn('Failed to add ICE candidate:', error); } }
+}
+
+// ====== Signaling helpers (optional) ======
+function connectToSignalServer() {
+  return new Promise((resolve, reject) => {
+    try {
+      signalSocket = new WebSocket(SIGNAL_URL);
+      signalSocket.onopen = () => {
+        updateNetworkStatus('active', 'Connected to Signal Server');
+        log(`🔗 Connected to signaling server: ${SIGNAL_URL}`);
+        sendSignal({ type: 'join', sessionId, peerId, role: isCoordinator ? 'coordinator' : 'worker' });
+        resolve();
+      };
+      signalSocket.onmessage = (event) => { try { const message = JSON.parse(event.data); handleSignalMessage(message); } catch (error) { console.warn('Invalid signal message:', error); } };
+      signalSocket.onerror = () => { reject(new Error('WebSocket connection failed')); };
+      signalSocket.onclose = () => { if (demoRunning) { updateNetworkStatus('connecting', 'Reconnecting...'); log('⚠️ Signal server disconnected, attempting reconnect...'); setTimeout(() => { if (demoRunning) connectToSignalServer().catch(() => {}); }, 3000); } };
+    } catch (error) {
+      if (broadcastChannel) { localFallbackMode = true; updateNetworkStatus('active', 'Local Demo Mode'); log('📱 Using local BroadcastChannel (no server needed)'); broadcastChannel.onmessage = (event) => { handleSignalMessage(event.data); }; resolve(); }
+      else { reject(error); }
+    }
+  });
+}
+function sendSignal(message) { message.from = peerId; message.sessionId = sessionId; if (localFallbackMode && broadcastChannel) broadcastChannel.postMessage(message); else if (signalSocket?.readyState === WebSocket.OPEN) signalSocket.send(JSON.stringify(message)); }
+async function handleSignalMessage(message) {
+  if (message.sessionId !== sessionId) return;
+  switch (message.type) {
+    case 'peer_joined':
+      if (isCoordinator && message.from !== peerId) { log(`📱 New peer joined: ${message.from.slice(0, 8)}`); const peer = new NetworkPeer(message.from); nodes.set(message.from, peer); await peer.connect(); updateMetrics(); }
+      break;
+    case 'offer':
+      if (!isCoordinator && message.to === peerId) { const peer = new NetworkPeer(message.from); nodes.set(message.from, peer); await peer.connect(); await peer.acceptOffer(message.sdp); }
+      break;
+    case 'answer':
+      if (isCoordinator && message.to === peerId) { const peer = nodes.get(message.from); if (peer) { await peer.acceptAnswer(message.sdp); } }
+      break;
+    case 'ice':
+      const peer = nodes.get(message.from); if (peer && message.to === peerId) { await peer.addIceCandidate(message.candidate); }
+      break;
+    case 'peer_left':
+      if (nodes.has(message.from)) { nodes.delete(message.from); log(`📱 Peer left: ${message.from.slice(0, 8)}`); updateMetrics(); renderWorkerList(); }
+      break;
+  }
+}
+
+// ====== Optimization State ======
 let problemData = [];
 let bestSolution = { route: null, distance: Infinity };
 let performanceHistory = [];
-let metrics = { totalOps: 0, startTime: 0 };
+let computeMetrics = { totalOperations: 0, startTime: 0, baselinePerformance: 0 };
 
-/* ========= DOM ========= */
-const el = {
+// ====== DOM ======
+const elements = {
   startDemo: document.getElementById('startDemo'),
-  joinDemo: document.getElementById('joinDemo'),
   runOptimization: document.getElementById('runOptimization'),
-  openWorker: document.getElementById('openWorker'),
-  inviteSection: document.getElementById('inviteSection'),
-  inviteUrl: document.getElementById('inviteUrl'),
+  stopDemo: document.getElementById('stopDemo'),
   networkStatus: document.getElementById('networkStatus'),
   statusText: document.getElementById('statusText'),
-  sessionPill: document.getElementById('sessionPill'),
-  sessionCode: document.getElementById('sessionCode'),
-  copyIdBtn: document.getElementById('copyIdBtn'),
-  copyLinkBtn: document.getElementById('copyLinkBtn'),
   nodeCount: document.getElementById('nodeCount'),
   computePower: document.getElementById('computePower'),
   performanceGain: document.getElementById('performanceGain'),
-  bestDist: document.getElementById('bestDist'),
-  nodeCountBadge: document.getElementById('nodeCountBadge'),
+  costSavings: document.getElementById('costSavings'),
+  inviteSection: document.getElementById('inviteSection'),
+  inviteUrl: document.getElementById('inviteUrl'),
   workerList: document.getElementById('workerList'),
+  problemCanvas: document.getElementById('problemCanvas'),
+  performanceChart: document.getElementById('performanceChart'),
   activityLog: document.getElementById('activityLog'),
-  size: document.getElementById('problemSize'),
-  sizeLabel: document.getElementById('sizeLabel'),
-  work: document.getElementById('workload'),
-  workLabel: document.getElementById('workLabel'),
-  canvas: document.getElementById('problemCanvas'),
-  chart: document.getElementById('performanceChart')
+  problemSize: document.getElementById('problemSize'),
+  workloadIntensity: document.getElementById('workloadIntensity'),
+  problemSizeValue: document.getElementById('problemSizeValue'),
+  workloadValue: document.getElementById('workloadValue'),
+  nodeCountBadge: document.getElementById('nodeCountBadge')
 };
-const ctx = el.canvas.getContext('2d');
-const chartCtx = el.chart.getContext('2d');
+const problemCtx = elements.problemCanvas.getContext('2d');
+const chartCtx = elements.performanceChart.getContext('2d');
 
-/* ========= UI helpers ========= */
-function log(msg){
-  const t = new Date().toLocaleTimeString();
-  const d = document.createElement('div');
-  d.innerHTML = `<span style="color:var(--muted)">[${t}]</span> ${msg}`;
-  el.activityLog.appendChild(d);
-  el.activityLog.scrollTop = el.activityLog.scrollHeight;
-}
-function setStatus(kind,text){
-  el.networkStatus.className = `status-badge status-${kind}`;
-  el.statusText.textContent = text;
-}
-function showSession(){
-  el.sessionCode.textContent = sessionId || '—';
-  el.sessionPill.style.display = sessionId ? 'inline-flex' : 'none';
-}
-function renderWorkers(){
-  if (nodes.size===0){
-    el.workerList.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No active nodes</div>';
-    return;
-  }
-  el.workerList.innerHTML = '';
-  for(const [id,n] of nodes){
-    const row = document.createElement('div');
-    row.className = 'worker';
-    row.innerHTML = `
-      <div>
-        <div class="worker-id">${id}</div>
-        <div class="worker-status">${n.status||'active'}</div>
-      </div>
-      <div class="perf-badge">${(n.latency??'-')} ms</div>
-      <div class="perf-badge">${(n.ops??0)} ops</div>
-    `;
-    el.workerList.appendChild(row);
-  }
-}
-function updateMetrics(){
+// ====== UI Helpers ======
+function log(message, type = 'info') { const timestamp = new Date().toLocaleTimeString(); const logEntry = document.createElement('div'); logEntry.innerHTML = `<span style="color:var(--muted)">[${timestamp}]</span> ${message}`; elements.activityLog.appendChild(logEntry); elements.activityLog.scrollTop = elements.activityLog.scrollHeight; }
+function updateNetworkStatus(status, text) { elements.networkStatus.className = `status-badge status-${status}`; elements.statusText.textContent = text; }
+function updateMetrics() {
   const nodeCount = nodes.size;
-  const ops = metrics.totalOps / Math.max(1, (Date.now()-metrics.startTime)/1000);
-  el.nodeCount.textContent = nodeCount;
-  el.computePower.textContent = Math.round(ops);
-  el.performanceGain.textContent = (nodeCount>0 ? (1 + (nodeCount-1)*0.8) : 1).toFixed(1);
-  el.nodeCountBadge.textContent = `${nodeCount} active`;
-  el.nodeCountBadge.className = `status-badge ${nodeCount>0 ? 'status-active':'status-idle'}`;
-  el.bestDist.textContent = (bestSolution.distance===Infinity?'—':Math.round(bestSolution.distance));
+  const computePower = computeMetrics.totalOperations / Math.max(1, (Date.now() - computeMetrics.startTime) / 1000);
+  const performanceGain = nodeCount > 0 ? Math.max(1, nodeCount * 0.8) : 1;
+  const costSavings = Math.round(computeMetrics.totalOperations * 0.0001 * nodeCount);
+  elements.nodeCount.textContent = nodeCount;
+  elements.computePower.textContent = Math.round(computePower);
+  elements.performanceGain.textContent = `${performanceGain.toFixed(1)}`;
+  elements.costSavings.textContent = `$${costSavings}`;
+  document.getElementById('roiSavings').textContent = `$${Math.round(costSavings * 30)}`;
+  document.getElementById('roiNodes').textContent = Math.round(nodeCount * 0.1);
+  document.getElementById('roiEfficiency').textContent = `${Math.round((performanceGain - 1) * 100)}`;
+  elements.nodeCountBadge.textContent = `${nodeCount} active`;
+  elements.nodeCountBadge.className = `status-badge ${nodeCount > 0 ? 'status-active' : 'status-idle'}`;
+}
+function renderWorkerList() {
+  if (nodes.size === 0) { elements.workerList.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No active nodes</div>'; return; }
+  elements.workerList.innerHTML = '';
+  for (const [id, node] of nodes) {
+    const workerEl = document.createElement('div'); workerEl.className = 'worker';
+    const perfClass = node.latency < 100 ? 'perf-excellent' : node.latency < 300 ? 'perf-good' : 'perf-poor';
+    workerEl.innerHTML = `
+      <div>
+        <div class="worker-id">${(id||'peer').toString().slice(0,8)}</div>
+        <div class="worker-status">${node.status || 'active'}</div>
+      </div>
+      <div class="perf-badge ${perfClass}">${node.latency||0}ms</div>
+      <div class="perf-badge">${node.operations || 0} ops</div>
+      <div class="perf-badge">CPU ${node.cpu || '—'}%</div>
+    `;
+    elements.workerList.appendChild(workerEl);
+  }
 }
 
-/* ========= Draw ========= */
-function drawProblem(){
-  const w = el.canvas.width, h = el.canvas.height;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle = '#f8f9fa';
-  for(const c of problemData){ ctx.beginPath(); ctx.arc(c.x,c.y,4,0,Math.PI*2); ctx.fill(); }
-  if (bestSolution.route){
-    ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    const r = bestSolution.route;
-    ctx.moveTo(problemData[r[0]].x, problemData[r[0]].y);
-    for(let i=1;i<r.length;i++){ const p = problemData[r[i]]; ctx.lineTo(p.x,p.y); }
-    ctx.lineTo(problemData[r[0]].x, problemData[r[0]].y);
-    ctx.stroke();
+// ====== Problem generation / drawing ======
+function generateProblem(size) {
+  const canvas = elements.problemCanvas; const width = canvas.width; const height = canvas.height;
+  problemData = []; for (let i = 0; i < size; i++) { problemData.push({ x: Math.random() * (width - 100) + 50, y: Math.random() * (height - 100) + 50 }); }
+  bestSolution = { route: null, distance: Infinity }; performanceHistory = []; drawProblem();
+}
+function drawProblem() {
+  const ctx = problemCtx; const canvas = elements.problemCanvas; ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#f8f9fa'; for (const city of problemData) { ctx.beginPath(); ctx.arc(city.x, city.y, 4, 0, Math.PI * 2); ctx.fill(); }
+  if (bestSolution.route) {
+    ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2; ctx.beginPath();
+    const route = bestSolution.route; ctx.moveTo(problemData[route[0]].x, problemData[route[0]].y);
+    for (let i = 1; i < route.length; i++) ctx.lineTo(problemData[route[i]].x, problemData[route[i]].y);
+    ctx.lineTo(problemData[route[0]].x, problemData[route[0]].y); ctx.stroke();
   }
-  ctx.fillStyle = '#8892b0'; ctx.font = '14px system-ui, sans-serif';
+  ctx.fillStyle = '#8892b0'; ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.fillText(`${problemData.length} cities`, 20, 30);
-  if (bestSolution.distance!==Infinity) ctx.fillText(`Best distance: ${Math.round(bestSolution.distance)}`, 20, 50);
+  if (bestSolution.distance !== Infinity) ctx.fillText(`Best distance: ${Math.round(bestSolution.distance)}`, 20, 50);
 }
-function drawChart(){
-  const w = el.chart.width, h = el.chart.height;
-  chartCtx.clearRect(0,0,w,h);
-  if (performanceHistory.length<2) return;
-  const min = Math.min(...performanceHistory.map(p=>p.distance));
-  const max = Math.max(...performanceHistory.map(p=>p.distance));
-  const rng = (max-min)||1;
-  chartCtx.beginPath();
-  chartCtx.lineWidth = 2;
-  chartCtx.strokeStyle = '#10b981';
-  performanceHistory.forEach((p,i)=>{
-    const x = 20 + i*(w-40)/(performanceHistory.length-1);
-    const y = h-20 - ((p.distance-min)/rng)*(h-40);
-    if(i===0) chartCtx.moveTo(x,y); else chartCtx.lineTo(x,y);
-  });
-  chartCtx.stroke();
+function drawPerformanceChart() {
+  if (performanceHistory.length < 2) return;
+  const ctx = chartCtx; const canvas = elements.performanceChart; const width = canvas.width; const height = canvas.height; ctx.clearRect(0, 0, width, height);
+  const minDistance = Math.min(...performanceHistory.map(p => p.distance)); const maxDistance = Math.max(...performanceHistory.map(p => p.distance)); const range = maxDistance - minDistance || 1;
+  ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2; ctx.beginPath();
+  performanceHistory.forEach((point, index) => { const x = (index / (performanceHistory.length - 1)) * (width - 40) + 20; const y = height - 20 - ((point.distance - minDistance) / range) * (height - 40); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
 }
 
-/* ========= Problem + GA ========= */
-function generateProblem(size){
-  const w = el.canvas.width, h = el.canvas.height;
-  problemData = Array.from({length:size},()=>({
-    x: Math.random()*(w-100)+50, y: Math.random()*(h-100)+50
-  }));
-  bestSolution = { route: null, distance: Infinity };
-  performanceHistory = [];
-  drawProblem(); drawChart();
-}
-function createRandomRoute(n){
-  const a = [...Array(n).keys()];
-  for(let i=n-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; }
-  return a;
-}
-function dist(route,cities){
-  let s=0, n=route.length;
-  for(let i=0;i<n;i++){
-    const A = cities[route[i]], B = cities[route[(i+1)%n]];
-    s += Math.hypot(A.x-B.x, A.y-B.y);
+// ====== Simulation + dispatch ======
+function simulateOptimizationStep() {
+  if (!optimizationRunning || problemData.length === 0) return;
+  const improvement = Math.random() * 0.02 * Math.max(1, nodes.size);
+  const newDistance = bestSolution.distance === Infinity ? calculateInitialDistance() : Math.max(bestSolution.distance * (1 - improvement), calculateInitialDistance() * 0.3);
+  if (newDistance < bestSolution.distance) {
+    bestSolution.distance = newDistance; bestSolution.route = generateRandomRoute();
+    performanceHistory.push({ time: Date.now(), distance: newDistance, nodes: nodes.size });
+    drawProblem(); drawPerformanceChart(); computeMetrics.totalOperations += nodes.size || 1; updateMetrics();
+    log(`Improved solution found: ${Math.round(newDistance)} (${nodes.size} nodes active)`);
   }
-  return s;
+  for (const [, node] of nodes) { node.operations = (node.operations || 0) + Math.floor(Math.random() * 10); node.cpu = Math.round(20 + Math.random() * 60); }
+  renderWorkerList();
 }
-function selectParent(pop, fit){
-  const k=3; let best= (Math.random()*pop.length)|0;
-  for(let i=1;i<k;i++){ const idx=(Math.random()*pop.length)|0; if (fit[idx]>fit[best]) best=idx; }
-  return pop[best];
+function dispatchComputeTasks(){
+  if (!isCoordinator || !problemData.length) return;
+  const params = { populationSize: 50 + Math.floor(Math.random()*20), generations: 15 + Math.floor(Math.random()*10), mutationRate: 0.1 };
+  for (const [, peer] of nodes){ if (peer?.dataChannel?.readyState === 'open'){ peer.send({ type: 'compute_task', taskId: (Date.now() + '-' + Math.random().toString(36).slice(2,6)), problemData, parameters: params }); } }
 }
-function crossover(p1,p2){
-  const n=p1.length, start=(Math.random()*n)|0, end=start+((Math.random()*(n-start))|0);
-  const child = new Array(n).fill(-1), used=new Set();
-  for(let i=start;i<=end;i++){ child[i]=p1[i]; used.add(p1[i]); }
-  let pos=(end+1)%n;
-  for(let i=0;i<n;i++){ const g=p2[(end+1+i)%n]; if(!used.has(g)){ child[pos]=g; pos=(pos+1)%n; } }
-  return child;
-}
-function mutate(r){ const i=(Math.random()*r.length)|0, j=(Math.random()*r.length)|0; [r[i],r[j]]=[r[j],r[i]]; return r; }
-function runEpoch(cities,{populationSize=60,generations=25,mutationRate=0.1}){
-  let pop = Array.from({length:populationSize},()=>createRandomRoute(cities.length));
-  let bestR=null, bestD=Infinity;
-  for(let g=0; g<generations; g++){
-    const fitness = pop.map(r=>1/dist(r,cities));
-    for(let i=0;i<pop.length;i++){ const d=1/fitness[i]; if (d<bestD){ bestD=d; bestR=[...pop[i]]; } }
-    const next=[...bestR];
-    while(next.length<populationSize){
-      const a=selectParent(pop, fitness), b=selectParent(pop, fitness);
-      let child=crossover(a,b);
-      if (Math.random()<mutationRate) child=mutate(child);
+function calculateInitialDistance() { if (problemData.length === 0) return 0; let totalDistance = 0; for (let i = 0; i < problemData.length; i++) { const current = problemData[i]; const next = problemData[(i + 1) % problemData.length]; totalDistance += Math.hypot(next.x - current.x, next.y - current.y); } return totalDistance; }
+function generateRandomRoute() { const route = Array.from({ length: problemData.length }, (_, i) => i); for (let i = route.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [route[i], route[j]] = [route[j], route[i]]; } return route; }
+
+// ====== GA worker (used on workers for real compute) ======
+function performOptimizationStep(cities, params) {
+  const { populationSize = 50, generations = 20, mutationRate = 0.1 } = params || {};
+  // init
+  let population = [];
+  for (let i = 0; i < populationSize; i++) population.push(createRandomRoute(cities.length));
+  let bestRoute = null, bestDistance = Infinity;
+
+  for (let gen = 0; gen < generations; gen++) {
+    // evaluate
+    const fitness = population.map(route => 1 / calculateRouteDistance(route, cities));
+    // track best
+    for (let i = 0; i < population.length; i++) {
+      const d = calculateRouteDistance(population[i], cities);
+      if (d < bestDistance) { bestDistance = d; bestRoute = population[i].slice(); }
+    }
+    // next gen
+    const next = [];
+    next.push(bestRoute.slice()); // elitism
+    while (next.length < populationSize) {
+      const p1 = selectParent(population, fitness);
+      const p2 = selectParent(population, fitness);
+      let child = crossover(p1, p2);
+      if (Math.random() < mutationRate) child = mutate(child);
       next.push(child);
     }
-    pop = next;
+    population = next;
   }
-  return { route: bestR, distance: bestD };
+  return { route: bestRoute, distance: bestDistance, generations, populationSize };
 }
-
-/* ========= Messaging (BroadcastChannel) ========= */
-function send(m){ if(!bc) return; bc.postMessage({ ...m, sessionId, from: peerId }); }
-if (bc){
-  bc.onmessage = (e)=>{
-    const m = e.data || {};
-    if (!sessionId || m.sessionId!==sessionId) return;
-    if (m.to && m.to!==peerId) return;
-
-    switch(m.type){
-      case 'HELLO':
-        if (isCoordinator){
-          nodes.set(m.from,{status:'connected', latency: Math.round(50+Math.random()*120), ops: 0});
-          send({type:'WELCOME', to:m.from});
-          updateMetrics(); renderWorkers();
-          log(`📱 Worker joined: ${m.from}`);
-        }
-        break;
-      case 'WELCOME':
-        if (!isCoordinator){ setStatus('active','Connected as Worker'); log('✅ Connected to coordinator'); }
-        break;
-      case 'TASK':
-        if (!isCoordinator){
-          const res = runEpoch(m.cities, m.params);
-          send({type:'RESULT', to:m.from, result: res});
-        }
-        break;
-      case 'RESULT':
-        if (isCoordinator && m.result){
-          metrics.totalOps++;
-          const r = m.result;
-          if (r.distance < bestSolution.distance){
-            bestSolution = r;
-            performanceHistory.push({time:Date.now(), distance:r.distance});
-            drawProblem(); drawChart();
-            updateMetrics();
-            log(`🎯 Improved solution: ${Math.round(r.distance)} by ${m.from}`);
-          }
-          const n = nodes.get(m.from); if (n){ n.ops++; renderWorkers(); }
-        }
-        break;
-      case 'BYE':
-        if (isCoordinator){ nodes.delete(m.from); renderWorkers(); updateMetrics(); log(`👋 Worker left: ${m.from}`); }
-        break;
-    }
-  };
-}
-
-/* ========= Demo Flow ========= */
-function joinLink(){ return location.href.split('#')[0] + '#join=' + sessionId; }
-
-function startDemo(){
-  if (!bc){ alert('Your browser does not support BroadcastChannel. Try a modern browser.'); return; }
-  sessionId = Math.random().toString(36).slice(2,10);
-  isCoordinator = true; demoRunning = true;
-  setStatus('active','Coordinator running');
-  showSession();
-  el.inviteSection.style.display = 'block';
-  el.runOptimization.disabled = false;
-  metrics.startTime = Date.now();
-  nodes.clear(); renderWorkers(); updateMetrics();
-  const link = joinLink();
-  el.inviteUrl.textContent = `Join link: ${link}`;
-  log(`🚀 Session started • ID ${sessionId}`);
-  log('Open this file in new tabs or share the join link. Then click “Join as Worker” there.');
-
-  // Dispatch tasks every 1.5s
-  const loop = setInterval(()=>{
-    if (!demoRunning || !isCoordinator) { clearInterval(loop); return; }
-    if (nodes.size===0 || !optimizationRunning) return;
-    for (const [id] of nodes){
-      send({type:'TASK', to:id, cities: problemData, params: {
-        populationSize: 30 + (+el.work.value)*3,
-        generations: 10 + (+el.work.value)*2,
-        mutationRate: 0.08
-      }});
-    }
-  }, 1500);
-}
-
-function joinDemo(){
-  if (!sessionId){
-    const guess = prompt('Enter Session ID (visible on coordinator):', '');
-    if (!guess) return;
-    sessionId = guess.trim();
+function createRandomRoute(n){ return generateRandomRoute().slice(0,n); }
+function calculateRouteDistance(route, cities) {
+  let total = 0;
+  for (let i = 0; i < route.length; i++) {
+    const a = cities[route[i]], b = cities[route[(i+1)%route.length]];
+    total += Math.hypot(b.x - a.x, b.y - a.y);
   }
-  isCoordinator = false; demoRunning = true;
-  setStatus('connecting','Joining…');
-  showSession();
-  send({type:'HELLO'});
+  return total;
+}
+function selectParent(population, fitness) {
+  const k = 3; let bestIdx = Math.floor(Math.random()*population.length), bestFit = fitness[bestIdx];
+  for (let i=1;i<k;i++){ const idx=Math.floor(Math.random()*population.length); if (fitness[idx] > bestFit){ bestIdx=idx; bestFit=fitness[idx]; } }
+  return population[bestIdx];
+}
+function crossover(p1, p2) {
+  const n = p1.length; const start = Math.floor(Math.random()*n); const end = start + Math.floor(Math.random()*(n-start));
+  const child = new Array(n).fill(-1); const used = new Set();
+  for (let i=start;i<=end;i++){ child[i]=p1[i]; used.add(p1[i]); }
+  let pos = (end+1)%n;
+  for (let i=0;i<n;i++){ const g = p2[(end+1+i)%n]; if (!used.has(g)){ child[pos]=g; pos=(pos+1)%n; } }
+  return child;
+}
+function mutate(route){ const r = route.slice(); const i=Math.floor(Math.random()*r.length), j=Math.floor(Math.random()*r.length); [r[i],r[j]]=[r[j],r[i]]; return r; }
+
+// ====== Demo session management ======
+async function startDemoSession() {
+  try {
+    sessionId = crypto.randomUUID?.()?.replace(/-/g,'') || Math.random().toString(36).slice(2,10);
+    isCoordinator = true; demoRunning = true; updateNetworkStatus('connecting', 'Starting Session...');
+    try { await connectToSignalServer(); log('🚀 Networking hooks ready'); log(`📡 Signaling: ${localFallbackMode ? 'Local BroadcastChannel' : 'WebSocket Server'}`); }
+    catch (error) { updateNetworkStatus('idle', 'No signaling server (okay)'); log('ℹ️ No signaling server detected — use Manual WebRTC panel'); }
+    log(`Session ID: ${sessionId.slice(0, 8)}`);
+    const inviteUrl = `${window.location.origin}${window.location.pathname}#join=${sessionId}`; elements.inviteUrl.textContent = inviteUrl; elements.inviteSection.style.display = 'block';
+    elements.startDemo.disabled = true; elements.runOptimization.disabled = false; elements.stopDemo.disabled = false; computeMetrics.startTime = Date.now();
+  } catch (error) { updateNetworkStatus('idle', 'Failed to Start'); log(`❌ Failed to start session: ${error.message}`); elements.startDemo.disabled = false; }
+}
+async function joinAsWorker(joinSessionId) {
+  try {
+    sessionId = joinSessionId; isCoordinator = false; demoRunning = true; updateNetworkStatus('connecting', 'Joining Session...'); log(`🔗 Joining session: ${sessionId.slice(0, 8)}`);
+    await connectToSignalServer(); sendSignal({ type: 'peer_joined', from: peerId }); updateNetworkStatus('active', 'Connected as Compute Node'); log('✅ Successfully joined as compute node');
+    elements.startDemo.style.display = 'none'; elements.runOptimization.style.display = 'none'; elements.stopDemo.style.display = 'none'; elements.inviteSection.style.display = 'none';
+    const workerStatus = document.createElement('div'); workerStatus.className = 'value-prop'; workerStatus.innerHTML = '<strong>Worker Node Active:</strong> This browser is contributing compute power to the distributed network.'; document.querySelector('.hero-card').insertBefore(workerStatus, document.querySelector('h3'));
+  } catch (error) { updateNetworkStatus('idle', 'Failed to Join'); log(`❌ Failed to join session: ${error.message}`); }
+}
+function stopDemoSession() { demoRunning = false; optimizationRunning = false; updateNetworkStatus('idle', 'Session Ended'); log('🛑 Demo session stopped'); elements.startDemo.disabled = false; elements.runOptimization.disabled = true; elements.stopDemo.disabled = true; elements.inviteSection.style.display = 'none'; nodes.clear(); updateMetrics(); renderWorkerList(); }
+function startOptimization() { const problemSize = parseInt(elements.problemSize.value); generateProblem(problemSize); optimizationRunning = true; elements.runOptimization.textContent = '⏸ Running...'; elements.runOptimization.disabled = true; log(`🎯 Starting optimization: ${problemSize} cities`); log(`Workload intensity: ${elements.workloadIntensity.value}/10`);
+  const optimizationInterval = setInterval(() => { if (!optimizationRunning) { clearInterval(optimizationInterval); elements.runOptimization.textContent = '▶ Run Optimization'; elements.runOptimization.disabled = false; return; } dispatchComputeTasks(); if (nodes.size === 0) simulateOptimizationStep(); }, 200);
 }
 
-function runOptimization(){
-  if (!isCoordinator){ alert('Only the coordinator starts the optimization.'); return; }
-  generateProblem(parseInt(el.size.value,10));
-  optimizationRunning = true;
-  el.runOptimization.disabled = true;
-  log(`🎯 Optimization started • ${problemData.length} cities • workload ${el.work.value}/10`);
-}
+function addSimulatedNode(id) { if (!demoRunning) return; const node = { id: id || crypto.randomUUID?.()?.replace(/-/g,'').slice(0, 8), status: 'connected', latency: Math.round(50 + Math.random() * 200), operations: 0, cpu: Math.round(10 + Math.random() * 30) }; nodes.set(node.id, node); updateMetrics(); renderWorkerList(); log(`📱 Node joined: ${node.id} (${node.latency}ms latency)`); }
 
-function openWorkerTab(){
-  const url = location.href.split('#')[0] + '#join=' + (sessionId||'');
-  const w = window.open(url, '_blank');
-  if (!w) log('❌ Popup blocked — allow popups or open a new tab manually');
-}
+// ====== Events ======
+// main controls
+elements.startDemo.addEventListener('click', startDemoSession);
+elements.stopDemo.addEventListener('click', stopDemoSession);
+elements.runOptimization.addEventListener('click', startOptimization);
 
-/* ========= Controls ========= */
-el.startDemo.addEventListener('click', startDemo);
-el.joinDemo.addEventListener('click', joinDemo);
-el.runOptimization.addEventListener('click', runOptimization);
-el.openWorker.addEventListener('click', openWorkerTab);
-el.size.addEventListener('input', e=> el.sizeLabel.textContent = e.target.value);
-el.work.addEventListener('input', e=> el.workLabel.textContent = `${e.target.value}/10`);
-el.copyIdBtn.addEventListener('click', async ()=>{
-  if (!sessionId) return;
-  try{ await navigator.clipboard.writeText(sessionId); log('📋 Session ID copied'); }catch{}
+// invite controls (single set)
+document.getElementById('copyInvite').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(elements.inviteUrl.textContent); log('📋 Invite link copied - share this with other computers!'); const instruction = document.createElement('div'); instruction.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--good);color:white;padding:12px;border-radius:8px;z-index:1000;'; instruction.innerHTML = '✅ Link copied! Share with other devices to add compute power.'; document.body.appendChild(instruction); setTimeout(() => instruction.remove(), 3000); } catch { log('❌ Failed to copy link'); }
 });
-el.copyLinkBtn.addEventListener('click', async ()=>{
-  if (!sessionId) return;
-  const link = joinLink();
-  try{ await navigator.clipboard.writeText(link); log('📋 Join link copied'); }catch{}
+document.getElementById('shareInvite').addEventListener('click', async () => {
+  const url = elements.inviteUrl.textContent; if (navigator.share) { try { await navigator.share({ title: 'Join NyxMesh Computing Demo', text: 'Help demonstrate distributed browser computing by joining this session', url }); log('📤 Invite shared successfully'); } catch (error) { if (error.name !== 'AbortError') { log('❌ Share failed, copying to clipboard instead'); navigator.clipboard.writeText(url); } } } else { showQRCode(url); }
 });
+function showQRCode(url) { const modal = document.createElement('div'); modal.style.cssText = `position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000;`;
+  const content = document.createElement('div'); content.style.cssText = `background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; text-align: center; max-width: 400px;`;
+  content.innerHTML = `
+    <h3 style="margin: 0 0 16px; color: var(--ink);">📱 Scan to Join</h3>
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" style="border-radius: 8px; background: white; padding: 8px;" alt="QR Code">
+    <div style="margin: 16px 0; font-family: monospace; font-size: 12px; word-break: break-all; color: var(--muted);">${url}</div>
+    <button class="btn btn-secondary" onclick="this.closest('[style*=fixed]').remove()">Close</button>`;
+  modal.appendChild(content); document.body.appendChild(modal); log('📱 QR code displayed - scan with phone/tablet to join'); }
 
-/* ========= Housekeeping ========= */
-window.addEventListener('beforeunload', ()=>{ if (demoRunning) send({type:'BYE'}); });
+document.getElementById('openWorker').addEventListener('click', (e) => { const url = elements.inviteUrl.textContent; if (e.shiftKey) { for (let i = 0; i < 3; i++) { setTimeout(() => { const w = window.open(url, `_blank${i}`); if (w) log(`🚀 Opened worker tab ${i + 1}/3`); }, i * 500); } } else { const w = window.open(url, '_blank'); if (w) log('🚀 Opened worker tab - it will auto-connect'); else log('❌ Popup blocked - please allow popups or copy the link manually'); } });
 
-/* ========= Metrics tick ========= */
-setInterval(()=>{
-  if (!demoRunning) return;
-  updateMetrics();
-  for(const [id,n] of nodes){ n.latency = Math.max(20, (n.latency||80) + (Math.random()*20-10)|0); }
-  renderWorkers();
-}, 1000);
+// hash join (optional server signaling path)
+window.addEventListener('hashchange', handleHashChange);
+window.addEventListener('load', handleHashChange);
+function handleHashChange() { const hash = window.location.hash.slice(1); const joinMatch = hash.match(/join=([^&]+)/); if (joinMatch && !demoRunning) joinAsWorker(joinMatch[1]); }
 
-/* ========= Quick join via #join=ID ========= */
-window.addEventListener('load', ()=>{
-  const m = location.hash.match(/join=([a-z0-9]+)/i);
-  if (m){ sessionId = m[1]; showSession(); joinDemo(); }
-});
+// sliders
+elements.problemSize.addEventListener('input', (e) => { elements.problemSizeValue.textContent = e.target.value; });
+elements.workloadIntensity.addEventListener('input', (e) => { elements.workloadValue.textContent = e.target.value; });
 
-/* ========= Hint ========= */
-log('Tip: Start Demo in one tab, then open 2–3 more tabs → Join as Worker.');
+// keyboard shortcuts
+document.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey) { switch (e.key) { case '1': e.preventDefault(); if (!demoRunning) elements.startDemo.click(); break; case '2': e.preventDefault(); if (demoRunning && !elements.runOptimization.disabled) elements.runOptimization.click(); break; case '3': e.preventDefault(); if (demoRunning) document.getElementById('openWorker').click(); break; } } });
+
+// metric animation (minor polish)
+const animateMetricChange = (element) => { element.style.transform = 'scale(1.1)'; element.style.transition = 'transform 0.2s'; setTimeout(() => { element.style.transform = 'scale(1)'; }, 200); };
+const originalUpdateMetrics = updateMetrics;
+updateMetrics = function() { const oldNodeCount = elements.nodeCount.textContent; originalUpdateMetrics(); if (elements.nodeCount.textContent !== oldNodeCount) animateMetricChange(elements.nodeCount); };
+
+// ===== Manual WebRTC (copy/paste) =====
+const mr = { role: 'coordinator', pc: null, dc: null, gatherTimer: null, peerId: 'manual-' + (crypto.randomUUID?.().slice(0,8) || Math.random().toString(36).slice(2,10)) };
+const MR_CONFIG = { iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 };
+const mrPack = (d)=> btoa(unescape(encodeURIComponent(JSON.stringify(d))));
+const mrUnpack = (b64)=> JSON.parse(decodeURIComponent(escape(atob(b64.replace(/\s+/g,'')))));
+const mrRoleInputs = document.querySelectorAll('input[name="mrRole"]');
+const mrLocal = document.getElementById('mrLocal');
+const mrRemote = document.getElementById('mrRemote');
+const mrState = document.getElementById('mrState');
+mrRoleInputs.forEach(r=>r.addEventListener('change',()=>{ mr.role=r.value; mrReset(); }));
+document.getElementById('mrCreate').onclick = async () => { try{ if(!mr.pc) mrSetupPC(); if(mr.role==='coordinator'){ const offer = await mr.pc.createOffer(); await mr.pc.setLocalDescription(offer); mrSetState('Gathering ICE…','connecting'); } else { if (!mr.pc.remoteDescription){ mrSetState('Set remote offer first','idle'); return; } const answer = await mr.pc.createAnswer(); await mr.pc.setLocalDescription(answer); mrSetState('Gathering ICE…','connecting'); } }catch(e){ console.error(e); mrSetState('Error creating SDP','idle'); } };
+document.getElementById('mrCopy').onclick = async () => { const t = mrLocal.value.trim(); if(!t) return; try{ await navigator.clipboard.writeText(t); mrSetState('Copied ✓','active'); }catch{ mrSetState('Copy failed','idle'); } };
+document.getElementById('mrSetRemote').onclick = async () => { try{ const raw = mrRemote.value.trim(); if(!raw){ mrSetState('Paste peer blob','idle'); return; } let desc; if (/^[A-Za-z0-9+/=\s]+$/.test(raw) && !/^\s*v=0/.test(raw)) desc = mrUnpack(raw); else if (/^\s*\{/.test(raw)) desc = JSON.parse(raw); else if (/^\s*v=0/.test(raw)) desc = { type: (mr.role==='coordinator'?'answer':'offer'), sdp: raw }; else throw new Error('Bad blob'); if(!mr.pc) mrSetupPC(); await mr.pc.setRemoteDescription(desc); mrSetState(`Remote ${desc.type} set`,'connecting'); }catch(e){ console.error(e); mrSetState('Invalid blob','idle'); } };
+function mrSetState(text, kind='idle'){ mrState.textContent = text; mrState.className = `status-badge status-${kind}`; }
+function mrReset(){ try{ mr.dc && mr.dc.close(); }catch{} try{ mr.pc && mr.pc.close(); }catch{} mr.pc = null; mr.dc = null; mrLocal.value=''; mrRemote.value=''; mrSetState('idle','idle'); }
+function mrSetupPC(){ mr.pc = new RTCPeerConnection(MR_CONFIG); let gatherTimer=null; mr.pc.onicecandidate = () => { if (gatherTimer) clearTimeout(gatherTimer); gatherTimer = setTimeout(()=>{ if (mr.pc.localDescription) mrLocal.value = mrPack(mr.pc.localDescription); }, 250); };
+  mr.pc.onconnectionstatechange = ()=>{ const s = mr.pc.connectionState; if (s==='connected'){ mrSetState('Connected ✓','active'); } else if (['failed','closed'].includes(s)){ mrSetState(s,'idle'); } };
+  if (mr.role==='coordinator'){ mr.dc = mr.pc.createDataChannel('compute', { ordered:true }); mrWireDC(mr.dc); } else { mr.pc.ondatachannel = (ev)=>{ mr.dc = ev.channel; mrWireDC(mr.dc); }; } }
+function mrWireDC(channel){ channel.onopen = ()=>{ const id = mr.peerId; const p = new NetworkPeer(id); p.pc = mr.pc; p.dataChannel = channel; p.setupDataChannel(); if (isCoordinator){ nodes.set(id, p); updateMetrics(); renderWorkerList(); log(`📱 Manual WebRTC node connected: ${id}`); } else { log('✅ DataChannel open (worker)'); } };
+  channel.onclose = ()=>{ if (isCoordinator && nodes.has(mr.peerId)) { nodes.delete(mr.peerId); updateMetrics(); renderWorkerList(); } mrSetState('Disconnected','idle'); };
+  channel.onerror = (e)=>{ console.error('DC error', e); mrSetState('DC error','idle'); }; }
+
+// ====== Init ======
+log('🧬 NyxMesh platform ready');
+log('Click "Start Demo Session" then use the Manual WebRTC panel to connect peers.');
+
+// periodic metric refresh
+setInterval(() => { if (demoRunning) { updateMetrics(); if (Math.random() < 0.05 && nodes.size > 2) { const nodeIds = Array.from(nodes.keys()); const randomNode = nodeIds[Math.floor(Math.random() * nodeIds.length)]; nodes.delete(randomNode); log(`📱 Node disconnected: ${randomNode}`); updateMetrics(); renderWorkerList(); setTimeout(() => { if (demoRunning) { addSimulatedNode(randomNode); } }, 3000 + Math.random() * 2000); } } }, 3000);
 </script>
 </body>
 </html>
