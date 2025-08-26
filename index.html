@@ -25,9 +25,10 @@
   .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
   .btn.secondary{background:#27273a;color:var(--ink);border:1px solid #333349}
   .btn.ghost{background:transparent;border:1px dashed #333349;color:var(--muted)}
+  .btn.danger{background:#ff5757;color:#0b0b0f}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  input,select{width:100%;background:#0f0f16;color:#bfe3ff;border:1px solid #282838;border-radius:8px;padding:10px}
+  textarea,input,select{width:100%;background:#0f0f16;color:#bfe3ff;border:1px solid #282838;border-radius:8px;padding:10px}
   .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
   .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
   .kpi{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px}
@@ -74,6 +75,35 @@
       <button id="open" class="btn secondary" title="Open worker tab" disabled>Open Worker</button>
     </div>
     <div class="status" id="status">Click “Start Coordinator”, then recruit peers.</div>
+
+    <!-- Manual/Auto mode controls -->
+    <div class="row" style="margin-top:8px;gap:8px">
+      <select id="sigMode" title="Signaling mode">
+        <option value="auto" selected>Auto (WS / BroadcastChannel)</option>
+        <option value="manual">Manual (copy/paste, no server)</option>
+      </select>
+      <select id="manualRole" title="Manual role">
+        <option value="coordinator" selected>Coordinator</option>
+        <option value="worker">Worker</option>
+      </select>
+    </div>
+
+    <!-- Manual copy/paste box -->
+    <div id="manualBox" style="display:none;margin-top:8px">
+      <div class="row" style="gap:8px">
+        <button id="mCreate" class="btn">Create Offer/Answer</button>
+        <button id="mCopy" class="btn secondary">📋 Copy</button>
+        <button id="mReset" class="btn danger">Reset</button>
+      </div>
+      <label class="mono" style="margin-top:8px">Your description (Base64)</label>
+      <textarea id="mLocal" rows="5" class="mono" placeholder="Your Base64 blob will appear here…" readonly></textarea>
+      <label class="mono" style="margin-top:8px">Peer description (Base64 / JSON / raw SDP)</label>
+      <textarea id="mRemote" rows="5" class="mono" placeholder="Paste the other side’s blob here…"></textarea>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button id="mSetRemote" class="btn">Set Remote</button>
+        <span id="mStatus" class="small"></span>
+      </div>
+    </div>
 
     <h2>GA Controls</h2>
     <div class="row" style="gap:10px">
@@ -128,12 +158,18 @@ let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 const MAX_INFLIGHT_PER_WORKER = 2;
 const EPOCH_TIMEOUT_MS = 15000;
-const JOBS_PER_WORKER = 2;            // ← send >1 job/worker/epoch
-let rrPtr = 0;                         // ← round-robin pointer
+const JOBS_PER_WORKER = 2;
+let rrPtr = 0;
 
 /* Local single-file fallback (no WS server) */
 const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('nyxmesh-demo') : null;
 let bcMode = false;
+
+/* Manual signaling mode */
+let SIGNAL_MODE = 'auto';           // 'auto' | 'manual'
+let manualRole = 'coordinator';     // 'coordinator' | 'worker'
+let mPC=null, mDC=null;
+let mPingTimer = null;              // for RTT in manual mode
 
 /* Force worker role if a tab opens the invite URL without &role=worker */
 (function forceWorkerIfInvited(){
@@ -171,6 +207,17 @@ let metrics = {
   epochWindow: [],
   localBaselineEPS: null
 };
+
+/***** Manual helpers (AIMless-style) *****/
+function pack(desc){ const json = JSON.stringify(desc); return btoa(unescape(encodeURIComponent(json))); }
+function unpackBase64(b64){ const json = decodeURIComponent(escape(atob(b64))); return JSON.parse(json); }
+function looksLikeJson(s){ return /^\s*\{/.test((s||"").trim()); }
+function looksLikeSdp(s){ return /^\s*v=0\s*/.test((s||"").trim()); }
+function mStatus(t,c){ const el=$("#mStatus"); if (el){ el.textContent=t||''; el.style.color=c||''; } }
+function mReset(){
+  try{ mDC&&mDC.close(); }catch{} try{ mPC&&mPC.close(); }catch{}
+  mPC=null; mDC=null; if($("#mLocal")) $("#mLocal").value=''; if($("#mRemote")) $("#mRemote").value=''; mStatus('reset');
+}
 
 /***** UI sync helpers *****/
 function refreshWorkersUI(){
@@ -266,6 +313,7 @@ function sigSend(obj){
 }
 function openSignaling(id){
   return new Promise((res) => {
+    if (SIGNAL_MODE === 'manual') { res(); return; } // manual mode: skip WS entirely
     try{
       sig = new WebSocket(SIGNAL_URL);
       sig.onopen = () => {
@@ -290,6 +338,7 @@ function openSignaling(id){
   });
 }
 async function onSignal(m){
+  if (SIGNAL_MODE === 'manual') return; // manual mode doesn't use WS events
   if (m.room && m.room !== roomId) return;
 
   if (!isCoord && m.type==='TASK_WS' && m.to===peerId && m.kind==='GA_EPOCH'){
@@ -325,6 +374,7 @@ class Peer{
     this.wsOnly=false; this.offerRetry=null; this._everConnected=false;
   }
   async maybeConnect(){
+    if (SIGNAL_MODE === 'manual') return; // manual handled by mPC/mDC
     if (this.pc || this.wsOnly || bcMode) {
       if (bcMode) { this.wsOnly = true; enableRunIfReady(); refreshWorkersUI(); }
       return;
@@ -337,7 +387,6 @@ class Peer{
         if (!this._everConnected){ this.wsOnly=true; refreshWorkersUI(); enableRunIfReady(); }
       }
     };
-    // Stall → WS fallback (RTC never really connects)
     setTimeout(() => {
       if (!this._everConnected && this.state!=='connected') {
         this.wsOnly = true; log('RTC stall → WS fallback for', this.id.slice(0,6));
@@ -381,7 +430,7 @@ let workerConn = null;
 class WorkerConn{
   constructor(){ this.pc=null; this.ctrl=null; }
   async start(){
-    if (bcMode) return; // local demo uses WS-style messages
+    if (bcMode || SIGNAL_MODE==='manual') return; // manual/local use different path
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
     this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } };
     this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
@@ -398,6 +447,89 @@ class WorkerConn{
     };
   }
   async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
+}
+
+/***** Manual DC wiring (fixed) *****/
+function makeManualPC(){
+  if (mPC){ try{mPC.close();}catch{} }
+  mPC = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
+  let gatherTimer=null;
+  mPC.onicecandidate = () => {
+    if (gatherTimer) clearTimeout(gatherTimer);
+    gatherTimer = setTimeout(()=>{ if (mPC.localDescription) $("#mLocal").value = pack(mPC.localDescription); }, 350);
+  };
+  mPC.onconnectionstatechange = () => {
+    const s=mPC.connectionState;
+    if (s==='connected' || s==='completed'){ mStatus('PC connected ✓','#7dff8b'); enableRunIfReady(); }
+  };
+  if (manualRole==='coordinator'){
+    mDC = mPC.createDataChannel('ctrl',{ordered:true});
+    wireManualDC(mDC,'manual');
+  } else {
+    mPC.ondatachannel = (e)=>{ mDC=e.channel; wireManualDC(mDC,'manual'); };
+  }
+}
+
+function wireManualDC(channel, id){
+  channel.onopen = ()=>{
+    let p = workers.get(id);
+    if (!p){ p = new Peer(id); workers.set(id,p); }
+    p.pc = mPC; p.ctrl = channel; p.state='dc-open'; p._everConnected=true;
+    refreshWorkersUI(); enableRunIfReady();
+    mStatus('DataChannel open ✓','#7dff8b');
+
+    if (isCoord) {
+      if (mPingTimer) clearInterval(mPingTimer);
+      let rttEMA = null;
+      mPingTimer = setInterval(()=>{
+        try { channel.send(JSON.stringify({type:'PING', t:Date.now()})); } catch {}
+      }, 4000);
+      p._manualRTT = (tSent)=>{
+        const rtt = Date.now() - tSent;
+        rttEMA = (rttEMA==null ? rtt : 0.8*rttEMA + 0.2*rtt);
+        p.rtt = Math.round(rttEMA);
+        refreshWorkersUI();
+      };
+    }
+  };
+
+  channel.onclose = ()=>{
+    mStatus('DC closed','#ff7d7d');
+    if (mPingTimer) { clearInterval(mPingTimer); mPingTimer=null; }
+  };
+  channel.onerror = ()=> mStatus('DC error','orange');
+
+  channel.onmessage = (ev)=>{
+    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+
+    if (isCoord) {
+      if (msg.type === 'PONG') {
+        const p = workers.get(id);
+        if (p && p._manualRTT && typeof msg.t === 'number') p._manualRTT(msg.t);
+        return;
+      }
+      if (msg.type === 'RESULT' && msg.kind === 'GA_EPOCH') {
+        const p = workers.get(id);
+        if (p) { p.inflight = Math.max(0, p.inflight - 1); p.epochs = (p.epochs||0) + 1; refreshWorkersUI(); }
+        handleEpochResult(id, msg.id, msg.result);
+        return;
+      }
+    } else {
+      if (msg.type === 'PING') {
+        try { channel.send(JSON.stringify({ type:'PONG', t:msg.t })); } catch {}
+        return;
+      }
+      if (msg.type === 'TASK' && msg.kind === 'GA_EPOCH') {
+        try {
+          const result = runEpochLocal(msg.params);
+          channel.send(JSON.stringify({ type:'RESULT', id:msg.id, kind:'GA_EPOCH', result }));
+        } catch (e) {
+          try { channel.send(JSON.stringify({ type:'RESULT', id:msg.id, kind:'GA_EPOCH', result:null })); } catch {}
+        }
+        return;
+      }
+    }
+  };
 }
 
 /***** GA scheduling (coord) *****/
@@ -431,8 +563,6 @@ function scheduleLoop(){
 
   for(let guard=0; guard< pending.length * 2; guard++){
     if (!pending.length) break;
-
-    // round-robin starting point
     let best=null, bestScore=Infinity, start = rrPtr;
     for(let k=0;k<N;k++){
       const p = peers[(start + k) % N];
@@ -584,6 +714,12 @@ $("#start").onclick = async () => {
   try {
     $("#start").disabled = true; isCoord = true;
     roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
+    if (SIGNAL_MODE === 'manual') {
+      pill($("#sigState"), "manual", "warn");
+      setStatus("Manual mode: create an offer below and connect a worker via copy/paste.");
+      enableRunIfReady();
+      return;
+    }
     setStatus("Creating session…"); await openSignaling(roomId);
     const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
     $("#invite").value = url;
@@ -594,7 +730,7 @@ $("#start").onclick = async () => {
       const count = e.shiftKey ? 5 : 1;
       for (let i=0;i<count;i++){ const w = window.open('about:blank'); if (w) w.location.href = url; }
     };
-    $("#open").disabled = true; // enabled when ready (below)
+    $("#open").disabled = true;
     setStatus("Session live. Recruit peers with the link or QR.");
   } catch (e) {
     setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
@@ -605,7 +741,7 @@ $("#run").onclick = () => {
   const n = parseInt($("#cities").value,10);
   if ($("#reset").value==='yes' || CITY.length!==n){
     genCities(n);
-    seedNearestNeighbor(); // show something immediately
+    seedNearestNeighbor();
   }
   running = true; epochNo=0; elitePool.length=0;
   $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false; $("#export").disabled=false;
@@ -636,10 +772,12 @@ function enableRunIfReady(){
   if (anyUsable) setStatus('Ready. Recruit peers and press ▶️ Start Optimization.');
 }
 
-/***** Auto-join as worker *****/
+/***** Auto-join as worker (skip in manual mode) *****/
 (async ()=>{
   const params = new URLSearchParams(location.hash.slice(1));
-  const rid = params.get('room'); const role = params.get('role'); if (!rid) return;
+  const rid = params.get('room'); const role = params.get('role');
+  if (!rid) return;
+  if (SIGNAL_MODE === 'manual') return; // manual uses copy/paste only
   roomId = rid; isCoord = (role !== 'worker');
   setStatus(isCoord? 'Coordinator mode' : 'Joining as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
   try {
@@ -693,6 +831,61 @@ if (bcMode && bc){
     if (roomId) sigSend({ type:"PEER_JOINED", room:roomId, peer:peerId });
   });
 }
+
+/***** Wire manual-mode UI *****/
+(function wireManualUI(){
+  const modeSel = $("#sigMode");
+  const roleSel = $("#manualRole");
+  const box = $("#manualBox");
+  if (!modeSel) return;
+
+  modeSel.addEventListener('change', () => {
+    SIGNAL_MODE = modeSel.value;
+    box.style.display = (SIGNAL_MODE==='manual') ? 'block' : 'none';
+    if (SIGNAL_MODE==='manual'){
+      pill($("#sigState"), "manual", "warn");
+      setStatus("Manual mode: use the box to exchange Base64 offers/answers.");
+      mReset();
+    } else {
+      setStatus("Auto mode: WS/BroadcastChannel (as available).");
+    }
+  });
+  roleSel.addEventListener('change', () => { manualRole = roleSel.value; mReset(); });
+
+  $("#mCreate").onclick = async ()=>{
+    if (!mPC) makeManualPC();
+    if (manualRole==='coordinator'){
+      const offer = await mPC.createOffer();
+      await mPC.setLocalDescription(offer);
+      mStatus('Gathering ICE for offer…');
+    } else {
+      if (!mPC.remoteDescription){ mStatus('Set remote offer first','#ffe57d'); return; }
+      const answer = await mPC.createAnswer();
+      await mPC.setLocalDescription(answer);
+      mStatus('Gathering ICE for answer…');
+    }
+  };
+  $("#mSetRemote").onclick = async ()=>{
+    try{
+      const raw = ($("#mRemote").value||'').trim();
+      if (!raw){ mStatus('Paste peer blob first','#ffe57d'); return; }
+      let desc;
+      if (looksLikeJson(raw)) desc = JSON.parse(raw);
+      else if (/^[A-Za-z0-9+/=\s]+$/.test(raw) && !looksLikeSdp(raw)) desc = unpackBase64(raw.replace(/\s+/g,''));
+      else if (looksLikeSdp(raw)) desc = { type: (manualRole==='coordinator'?'answer':'offer'), sdp: raw };
+      else throw new Error('Unrecognized blob format');
+      if (!mPC) makeManualPC();
+      await mPC.setRemoteDescription(desc);
+      mStatus(`Remote ${desc.type} set`);
+    }catch(e){ console.error(e); mStatus('Invalid blob','#ff7d7d'); }
+  };
+  $("#mCopy").onclick = async ()=>{
+    const t = ($("#mLocal").value||'').trim();
+    if (!t){ mStatus('Nothing to copy','#ffe57d'); return; }
+    try{ await navigator.clipboard.writeText(t); mStatus('Copied Base64 ✓','#7dff8b'); }catch{ mStatus('Copy failed','#ff7d7d'); }
+  };
+  $("#mReset").onclick = mReset;
+})();
 </script>
 </body>
 </html>
