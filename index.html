@@ -3,889 +3,493 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>NyxMesh • Browser Mesh Optimizer (Investor Demo)</title>
+<title>NyxMesh • Distributed Browser Computing Platform (POC)</title>
 <style>
   :root{
-    --bg:#0b0b0f;--panel:#12121a;--ink:#eaeaf2;--muted:#9aa0ad;--accent:#9b5cff;--accent-2:#00e5a8;
-    --accent-hover:#b47dff;--good:#7dff8b;--warn:#ffe57d;--bad:#ff7d7d;--line:#232334;--chip:#1a1a24;
+    --bg:#0a0a0f;--panel:#141420;--ink:#f8f9fa;--muted:#8892b0;--accent:#6366f1;--accent-2:#10b981;
+    --accent-hover:#818cf8;--good:#34d399;--warn:#fbbf24;--bad:#f87171;--line:#374151;--chip:#1f2937;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    background:radial-gradient(1200px 600px at 10% 0%,#141421 0%,var(--bg) 60%);color:var(--ink);
-    display:flex;justify-content:center;padding:18px
+    margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1200px 600px at 20% 0%,#1e1b4b 0%,var(--bg) 70%);color:var(--ink);
+    display:flex;justify-content:center;padding:20px
   }
-  .wrap{width:100%;max-width:1200px;display:grid;grid-template-columns:420px 1fr;gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-  h1{margin:0 0 8px;font-size:18px}
-  h2{margin:12px 0 10px;font-size:15px;color:var(--muted)}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .btn{background:var(--accent);color:#0b0b0f;border:0;padding:9px 12px;border-radius:10px;font-weight:700;cursor:pointer;transition:.2s}
+  .container{width:100%;max-width:1400px;display:grid;grid-template-columns:500px 1fr;gap:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;backdrop-filter:blur(12px)}
+  .hero-card{background:linear-gradient(135deg, rgba(99,102,241,0.1), rgba(16,185,129,0.1));border:1px solid rgba(99,102,241,0.3)}
+  h1{margin:0 0 12px;font-size:24px;font-weight:700;background:linear-gradient(135deg, #6366f1, #10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  h2{margin:20px 0 12px;font-size:18px;color:var(--ink);font-weight:600}
+  h3{margin:12px 0 8px;font-size:16px;color:var(--muted);font-weight:500}
+  .subtitle{color:var(--muted);font-size:16px;margin-bottom:20px;line-height:1.6}
+  .value-prop{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin:16px 0}
+  .value-prop strong{color:var(--accent)}
+  .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+  .metric{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center}
+  .metric-label{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px}
+  .metric-value{font-size:28px;font-weight:800;color:var(--ink)}
+  .metric-unit{font-size:14px;color:var(--muted);margin-left:4px}
+  .status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600}
+  .status-idle{background:rgba(139,92,246,0.2);color:#a78bfa}
+  .status-active{background:rgba(34,197,94,0.2);color:#4ade80}
+  .status-connecting{background:rgba(251,191,36,0.2);color:#fbbf24}
+  .btn{background:var(--accent);color:white;border:0;padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.2s;font-size:14px}
   .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
-  .btn.secondary{background:#27273a;color:var(--ink);border:1px solid #333349}
-  .btn.ghost{background:transparent;border:1px dashed #333349;color:var(--muted)}
-  .btn.danger{background:#ff5757;color:#0b0b0f}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  textarea,input,select{width:100%;background:#0f0f16;color:#bfe3ff;border:1px solid #282838;border-radius:8px;padding:10px}
-  .kv{display:flex;justify-content:space-between;border-bottom:1px dashed #2a2a3a;padding:4px 0}
-  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-  .kpi{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:10px}
-  .kpi h3{margin:0;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
-  .kpi .v{font-size:20px;font-weight:800;margin-top:4px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#24243a;color:var(--ink);font-size:12px}
-  .ok{background:#1d3d23;color:var(--good)}.warn{background:#3d3d1d;color:var(--warn)}.bad{background:#3d1d1d;color:var(--bad)}
-  .status{margin-top:10px;padding:8px;border-radius:8px;background:#1a1a24;border:1px solid #2a2a3a;font-size:13px}
-  .workers{margin-top:6px;display:flex;flex-direction:column;gap:6px}
-  .worker{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #2b2b3a;border-radius:10px;background:#12121a}
-  .muted{color:var(--muted)}
-  .pitch{background:linear-gradient(90deg, rgba(155,92,255,.12), rgba(0,229,168,.12));border:1px solid #2b2b3a;border-radius:12px;padding:10px;margin-top:8px}
-  .small{font-size:12px;color:var(--muted)}
-  .log{height:160px;overflow:auto;background:#0e0e15;border:1px solid #242436;border-radius:8px;padding:8px}
-  canvas{width:100%;height:auto;background:#0b0b12;border:1px solid #242436;border-radius:10px}
-  @media (max-width: 920px) {.wrap{grid-template-columns:1fr}.card:first-child{order:2}.card:last-child{order:1}}
+  .btn-secondary{background:var(--chip);color:var(--ink);border:1px solid var(--line)}
+  .btn-success{background:var(--good);color:#0f172a}
+  .btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+  .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}
+  input{accent-color:#6366f1}
+  input[type=range]{width:100%}
+  .slider-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{font-size:13px;color:var(--muted);display:block}
+  .label-line{display:flex;justify-content:space-between}
+  canvas{width:100%;height:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:inset 0 2px 4px rgba(0,0,0,0.1)}
+  .worker-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .worker{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:10px;background:rgba(31,41,55,0.5)}
+  .worker-id{font-family:ui-monospace,monospace;font-size:12px}
+  .worker-status{font-size:11px;color:var(--muted)}
+  .perf-badge{padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(34,197,94,0.2);color:#4ade80}
+  .invite-section{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin:16px 0}
+  .invite-url{font-family:ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;word-break:break-all;margin:8px 0}
+  .activity-log{height:120px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted)}
+  /* Session pill */
+  .session-pill{display:none;gap:8px;align-items:center;background:rgba(31,41,55,0.5);border:1px solid var(--line);border-radius:999px;padding:6px 10px;margin:8px 0 0 0;width:fit-content}
+  .session-pill code{font-family:ui-monospace,monospace;font-size:12px;padding:2px 6px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+  .mini-btn{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer}
+  .mini-btn:hover{background:#232838}
+  @media (max-width: 1100px) {
+    .container{grid-template-columns:1fr;gap:16px}
+    .metrics-grid{grid-template-columns:1fr 1fr 1fr}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>🧬 NyxMesh — Browser Mesh Optimizer</h1>
-    <div class="kv"><span>Signaling</span><span id="sigState" class="pill">idle</span></div>
-    <div class="kpis">
-      <div class="kpi"><h3>Active Peers</h3><div id="kPeers" class="v">0</div></div>
-      <div class="kpi"><h3>Global Epochs / sec</h3><div id="kThroughput" class="v">0.0</div></div>
-      <div class="kpi"><h3>Best Route (px)</h3><div id="kBest" class="v">—</div></div>
-      <div class="kpi"><h3>Speedup vs 1 Worker</h3><div id="kSpeedup" class="v">1.0×</div></div>
-      <div class="kpi"><h3>Est. $ Saved*</h3><div id="kDollars" class="v">$0.00</div></div>
-    </div>
-    <div class="small">*Back-of-envelope vs cloud CPU at $0.000011/epoch (configurable).</div>
+<div class="container">
+  <!-- Control Panel -->
+  <div class="card hero-card">
+    <h1>🧬 NyxMesh</h1>
+    <div class="subtitle">Distributed Browser Computing Platform</div>
 
-    <div class="pitch">
-      <b>What you’re seeing:</b> every open browser becomes a compute node. We run a genetic algorithm for routing (TSP). More peers ⇒ more parallel epochs ⇒ shorter routes faster — no installs, no cloud.
+    <div class="value-prop">
+      <strong>Proof of Concept:</strong> Every browser tab becomes a compute node. Open more tabs → solve faster. No installs. No cloud.
     </div>
 
-    <h2>Session</h2>
-    <div class="row"><button id="start" class="btn">Start Coordinator</button></div>
-    <div class="row" style="margin-top:8px">
-      <input id="invite" class="mono" placeholder="Invite link appears here" readonly />
-      <button id="copy" class="btn secondary" title="Copy link">Copy</button>
-      <button id="share" class="btn secondary" title="Share link">Share</button>
-      <button id="qr" class="btn secondary" title="Show QR">QR</button>
-      <button id="open" class="btn secondary" title="Open worker tab" disabled>Open Worker</button>
+    <!-- Network + Session -->
+    <h3>Network Status</h3>
+    <div class="status-badge status-idle" id="networkStatus">
+      <span>⚡</span>
+      <span id="statusText">Ready</span>
     </div>
-    <div class="status" id="status">Click “Start Coordinator”, then recruit peers.</div>
-
-    <!-- Manual/Auto mode controls -->
-    <div class="row" style="margin-top:8px;gap:8px">
-      <select id="sigMode" title="Signaling mode">
-        <option value="auto" selected>Auto (WS / BroadcastChannel)</option>
-        <option value="manual">Manual (copy/paste, no server)</option>
-      </select>
-      <select id="manualRole" title="Manual role">
-        <option value="coordinator" selected>Coordinator</option>
-        <option value="worker">Worker</option>
-      </select>
+    <div class="session-pill" id="sessionPill">
+      <span style="color:var(--muted)">Session</span>
+      <code id="sessionCode">—</code>
+      <button class="mini-btn" id="copyIdBtn">Copy ID</button>
+      <button class="mini-btn" id="copyLinkBtn">Copy Link</button>
     </div>
 
-    <!-- Manual copy/paste box -->
-    <div id="manualBox" style="display:none;margin-top:8px">
-      <div class="row" style="gap:8px">
-        <button id="mCreate" class="btn">Create Offer/Answer</button>
-        <button id="mCopy" class="btn secondary">📋 Copy</button>
-        <button id="mReset" class="btn danger">Reset</button>
+    <!-- Key Metrics -->
+    <div class="metrics-grid">
+      <div class="metric">
+        <div class="metric-label">Active Nodes</div>
+        <div class="metric-value" id="nodeCount">0</div>
       </div>
-      <label class="mono" style="margin-top:8px">Your description (Base64)</label>
-      <textarea id="mLocal" rows="5" class="mono" placeholder="Your Base64 blob will appear here…" readonly></textarea>
-      <label class="mono" style="margin-top:8px">Peer description (Base64 / JSON / raw SDP)</label>
-      <textarea id="mRemote" rows="5" class="mono" placeholder="Paste the other side’s blob here…"></textarea>
-      <div class="row" style="gap:8px;margin-top:8px">
-        <button id="mSetRemote" class="btn">Set Remote</button>
-        <span id="mStatus" class="small"></span>
+      <div class="metric">
+        <div class="metric-label">Compute Power</div>
+        <div class="metric-value"><span id="computePower">0</span><span class="metric-unit"> ops/s</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Speedup</div>
+        <div class="metric-value"><span id="performanceGain">1.0</span><span class="metric-unit">×</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Best Distance</div>
+        <div class="metric-value" id="bestDist">—</div>
       </div>
     </div>
 
-    <h2>GA Controls</h2>
-    <div class="row" style="gap:10px">
-      <label style="flex:1">Cities<input id="cities" type="number" value="40" min="8" max="200"/></label>
-      <label style="flex:1">Pop/Worker<input id="pop" type="number" value="150" min="20" step="10"/></label>
-    </div>
-    <div class="row" style="gap:10px;margin-top:8px">
-      <label style="flex:1">Gen/Epoch<input id="gens" type="number" value="80" min="10"/></label>
-      <label style="flex:1">Mutation %<input id="mut" type="number" value="8" min="0" max="50"/></label>
-      <label style="flex:1">Elites<input id="elites" type="number" value="5" min="1" max="20"/></label>
-    </div>
-    <div class="row" style="margin-top:10px;">
-      <button id="run" class="btn" disabled>▶️ Start Optimization</button>
-      <button id="stop" class="btn secondary" disabled>Stop</button>
-      <button id="snapshot" class="btn ghost" disabled>Snapshot</button>
-    </div>
-
-    <h2>Investor Toggles</h2>
-    <div class="row" style="gap:10px">
-      <label style="flex:1">Reset Cities<select id="reset"><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
-      <label style="flex:1">Cloud $/epoch<input id="unitCost" type="number" value="0.000011" step="0.000001"/></label>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button id="baseline" class="btn secondary">⏱️ 30s Local Baseline</button>
-      <button id="export" class="btn ghost" disabled>Export CSV</button>
+    <!-- Demo Controls -->
+    <div class="demo-controls">
+      <h3 style="margin-top:0">Demo Controls</h3>
+      <div class="controls">
+        <button id="startDemo" class="btn">🚀 Start Demo (Coordinator)</button>
+        <button id="joinDemo" class="btn btn-success">👥 Join as Worker</button>
+        <button id="runOptimization" class="btn btn-secondary" disabled>▶ Run Optimization</button>
+      </div>
+      <div class="slider-row">
+        <div>
+          <div class="label-line"><label>Problem Size</label><span id="sizeLabel">40</span></div>
+          <input id="problemSize" type="range" min="20" max="120" value="40" />
+        </div>
+        <div>
+          <div class="label-line"><label>Workload</label><span id="workLabel">5/10</span></div>
+          <input id="workload" type="range" min="1" max="10" value="5" />
+        </div>
+      </div>
     </div>
 
-    <h2>Workers</h2>
-    <div id="workers" class="workers"></div>
+    <!-- Invite / Add Nodes -->
+    <div class="invite-section" id="inviteSection" style="display:none">
+      <h3 style="margin-top:0">📱 Add Nodes</h3>
+      <div class="invite-url" id="inviteUrl">Open this exact file in other tabs/devices and click “Join as Worker”.</div>
+      <div class="controls">
+        <button id="openWorker" class="btn btn-secondary">➕ Open Local Worker Tab</button>
+      </div>
+    </div>
+
+    <!-- Active Nodes -->
+    <h3>Compute Nodes <span id="nodeCountBadge" class="status-badge status-idle">0 active</span></h3>
+    <div id="workerList" class="worker-list">
+      <div style="color:var(--muted);text-align:center;padding:20px">Start demo to see active nodes</div>
+    </div>
+
+    <h3>Activity</h3>
+    <div id="activityLog" class="activity-log">
+      <div style="color:var(--accent)">NyxMesh POC ready</div>
+      <div>Open multiple tabs to contribute compute.</div>
+    </div>
   </div>
 
+  <!-- Visualization Panel -->
   <div class="card">
-    <h1>🗺️ Best Tour <span id="bestLen" class="pill">—</span> <span id="epoch" class="pill">0</span></h1>
-    <canvas id="canvas" width="1024" height="640"></canvas>
-
-    <h2>Progress</h2>
-    <canvas id="chart" width="1024" height="120"></canvas>
-    <div class="small" style="margin:6px 0 10px">Best distance vs time (lower is better).</div>
-
-    <h2>Activity</h2>
-    <pre id="log" class="log mono"></pre>
+    <h2>🎯 Live Optimization</h2>
+    <div class="subtitle">Traveling Salesman Problem — collaborative solving across tabs</div>
+    <canvas id="problemCanvas" width="800" height="500"></canvas>
+    <h3>Performance Over Time</h3>
+    <canvas id="performanceChart" width="800" height="120"></canvas>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">More nodes ⇒ faster improvement of the purple route</div>
   </div>
 </div>
 
 <script>
-/***** CONFIG *****/
-const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
-  + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost")
-  + ":" + ((location.port && location.port !== "") ? location.port : "8080");
-let SIGNAL_URL = DEFAULT_SIGNAL_URL;
-(() => { const u = new URL(location.href); const override = u.searchParams.get("signal"); if (override) SIGNAL_URL = override; })();
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
-const MAX_INFLIGHT_PER_WORKER = 2;
-const EPOCH_TIMEOUT_MS = 15000;
-const JOBS_PER_WORKER = 2;
-let rrPtr = 0;
+/* ========= Simple P2P-in-a-tab: BroadcastChannel ========= */
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('nyxmesh-poc') : null;
 
-/* Local single-file fallback (no WS server) */
-const bc = ('BroadcastChannel' in self) ? new BroadcastChannel('nyxmesh-demo') : null;
-let bcMode = false;
+/* ========= State ========= */
+const peerId = Math.random().toString(36).slice(2,10);
+let sessionId = null;
+let isCoordinator = false;
+let demoRunning = false;
+let optimizationRunning = false;
 
-/* Manual signaling mode */
-let SIGNAL_MODE = 'auto';           // 'auto' | 'manual'
-let manualRole = 'coordinator';     // 'coordinator' | 'worker'
-let mPC=null, mDC=null;
-let mPingTimer = null;              // for RTT in manual mode
+const nodes = new Map(); // id -> {latency, ops, status}
+let problemData = [];
+let bestSolution = { route: null, distance: Infinity };
+let performanceHistory = [];
+let metrics = { totalOps: 0, startTime: 0 };
 
-/* Force worker role if a tab opens the invite URL without &role=worker */
-(function forceWorkerIfInvited(){
-  const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get('room') && !h.get('role')) {
-    h.set('role','worker');
-    location.hash = '#' + h.toString();
-  }
-})();
-
-/***** DOM helpers *****/
-const $ = s => document.querySelector(s);
-function pill(el, text, cls){ if(!el) return; el.textContent = text; el.className = "pill " + (cls||""); }
-function setStatus(msg){ $("#status").textContent = msg; }
-const logEl = $("#log");
-function log(...a){ const ts=new Date().toLocaleTimeString(); logEl.textContent += `[${ts}] ${a.join(" ")}\n`; logEl.scrollTop = logEl.scrollHeight; }
-
-/***** Global state *****/
-const peerId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
-let roomId = null, isCoord = false;
-let sig = null; // WebSocket
-const canvas = $("#canvas"), ctx = canvas.getContext("2d");
-const chart = $("#chart"), cctx = chart.getContext("2d");
-let CANVAS_W = canvas.width, CANVAS_H = canvas.height;
-
-const workers = new Map(); // id -> Peer
-let CITY = [];      // [{x,y}]
-let BEST = { route:null, len:Infinity };
-let running=false, epochNo=0;
-
-let metrics = {
-  startTs: 0,
-  bestSeries: [], // [ {t,len} ]
-  epochsCompleted: 0,
-  epochWindow: [],
-  localBaselineEPS: null
+/* ========= DOM ========= */
+const el = {
+  startDemo: document.getElementById('startDemo'),
+  joinDemo: document.getElementById('joinDemo'),
+  runOptimization: document.getElementById('runOptimization'),
+  openWorker: document.getElementById('openWorker'),
+  inviteSection: document.getElementById('inviteSection'),
+  inviteUrl: document.getElementById('inviteUrl'),
+  networkStatus: document.getElementById('networkStatus'),
+  statusText: document.getElementById('statusText'),
+  sessionPill: document.getElementById('sessionPill'),
+  sessionCode: document.getElementById('sessionCode'),
+  copyIdBtn: document.getElementById('copyIdBtn'),
+  copyLinkBtn: document.getElementById('copyLinkBtn'),
+  nodeCount: document.getElementById('nodeCount'),
+  computePower: document.getElementById('computePower'),
+  performanceGain: document.getElementById('performanceGain'),
+  bestDist: document.getElementById('bestDist'),
+  nodeCountBadge: document.getElementById('nodeCountBadge'),
+  workerList: document.getElementById('workerList'),
+  activityLog: document.getElementById('activityLog'),
+  size: document.getElementById('problemSize'),
+  sizeLabel: document.getElementById('sizeLabel'),
+  work: document.getElementById('workload'),
+  workLabel: document.getElementById('workLabel'),
+  canvas: document.getElementById('problemCanvas'),
+  chart: document.getElementById('performanceChart')
 };
+const ctx = el.canvas.getContext('2d');
+const chartCtx = el.chart.getContext('2d');
 
-/***** Manual helpers (AIMless-style) *****/
-function pack(desc){ const json = JSON.stringify(desc); return btoa(unescape(encodeURIComponent(json))); }
-function unpackBase64(b64){ const json = decodeURIComponent(escape(atob(b64))); return JSON.parse(json); }
-function looksLikeJson(s){ return /^\s*\{/.test((s||"").trim()); }
-function looksLikeSdp(s){ return /^\s*v=0\s*/.test((s||"").trim()); }
-function mStatus(t,c){ const el=$("#mStatus"); if (el){ el.textContent=t||''; el.style.color=c||''; } }
-function mReset(){
-  try{ mDC&&mDC.close(); }catch{} try{ mPC&&mPC.close(); }catch{}
-  mPC=null; mDC=null; if($("#mLocal")) $("#mLocal").value=''; if($("#mRemote")) $("#mRemote").value=''; mStatus('reset');
+/* ========= UI helpers ========= */
+function log(msg){
+  const t = new Date().toLocaleTimeString();
+  const d = document.createElement('div');
+  d.innerHTML = `<span style="color:var(--muted)">[${t}]</span> ${msg}`;
+  el.activityLog.appendChild(d);
+  el.activityLog.scrollTop = el.activityLog.scrollHeight;
 }
-
-/***** UI sync helpers *****/
-function refreshWorkersUI(){
-  $("#kPeers").textContent = String(workers.size);
-  const host = $("#workers"); host.innerHTML = "";
-  for (const p of workers.values()){
-    const el = document.createElement('div'); el.className = 'worker'; el.id = `w-${p.id}`;
-    el.innerHTML = `
-      <div class="mono">${p.id.slice(0,8)} <span class="muted">${p.wsOnly? 'ws-only' : p.state}</span></div>
-      <div class="pill ${p.rtt<80?'ok':p.rtt<200?'warn':'bad'}">${p.rtt? p.rtt+'ms':'—'}</div>
-      <div class="pill">inflight ${p.inflight}</div>
-      <div class="pill">epochs ${p.epochs||0}</div>`;
-    host.appendChild(el);
-  }
+function setStatus(kind,text){
+  el.networkStatus.className = `status-badge status-${kind}`;
+  el.statusText.textContent = text;
 }
-function drawCitiesAndBest(){
-  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
-  ctx.fillStyle="#eaeaf2"; for (const c of CITY){ ctx.beginPath(); ctx.arc(c.x,c.y,3,0,Math.PI*2); ctx.fill(); }
-  if (BEST.route){
-    ctx.strokeStyle="#9b5cff"; ctx.lineWidth=2; ctx.beginPath();
-    let i0 = BEST.route[0]; ctx.moveTo(CITY[i0].x, CITY[i0].y);
-    for (let i=1;i<BEST.route.length;i++){ const ci = CITY[BEST.route[i]]; ctx.lineTo(ci.x,ci.y); }
-    ctx.lineTo(CITY[i0].x, CITY[i0].y); ctx.stroke();
-  }
-  $("#bestLen").textContent = (BEST.len<Infinity? BEST.len.toFixed(1) : "—");
-  $("#kBest").textContent = $("#bestLen").textContent;
+function showSession(){
+  el.sessionCode.textContent = sessionId || '—';
+  el.sessionPill.style.display = sessionId ? 'inline-flex' : 'none';
 }
-function drawChart(){
-  const W=chart.width, H=chart.height;
-  cctx.clearRect(0,0,W,H);
-  cctx.fillStyle="#16161d"; cctx.fillRect(0,0,W,H);
-  if (metrics.bestSeries.length<2){ cctx.fillStyle="#9aa0ad"; cctx.fillText("…", 6, 14); return; }
-  const t0 = metrics.bestSeries[0].t, t1 = metrics.bestSeries.at(-1).t;
-  const min = Math.min(...metrics.bestSeries.map(d=>d.len));
-  const max = Math.max(...metrics.bestSeries.map(d=>d.len));
-  const span = Math.max(1e-6, max - min);
-  const xFor = t => (t - t0) / (t1 - t0 + 1) * (W-20) + 10;
-  const yFor = v => H-10 - (v - min) / span * (H-20);
-  cctx.strokeStyle="#00e5a8"; cctx.lineWidth=2; cctx.beginPath();
-  metrics.bestSeries.forEach((d,i)=>{ if (i===0) cctx.moveTo(xFor(d.t), yFor(d.len)); else cctx.lineTo(xFor(d.t), yFor(d.len)); });
-  cctx.stroke();
-  cctx.fillStyle="#9aa0ad"; cctx.font="11px ui-monospace";
-  cctx.fillText(`${min.toFixed(1)} px`, 8, yFor(min)-4);
-  cctx.fillText(`${max.toFixed(1)} px`, 8, yFor(max)+12);
-}
-
-/***** KPI updates *****/
-function updateThroughput(){
-  const now = performance.now();
-  metrics.epochWindow = metrics.epochWindow.filter(ts => now - ts < 2000);
-  const eps = metrics.epochWindow.length / 2;
-  $("#kThroughput").textContent = eps.toFixed(1);
-  if (metrics.localBaselineEPS){
-    const speed = eps / metrics.localBaselineEPS;
-    $("#kSpeedup").textContent = `${Math.max(1, speed).toFixed(1)}×`;
-  }
-  const unit = parseFloat($("#unitCost").value || "0.000011");
-  $("#kDollars").textContent = `$${(metrics.epochsCompleted * unit).toFixed(2)}`;
-}
-
-/***** Cities + seed *****/
-function genCities(n){
-  CITY = Array.from({length:n}, ()=>({
-    x: Math.random()*CANVAS_W*.9 + CANVAS_W*.05,
-    y: Math.random()*CANVAS_H*.8 + CANVAS_H*.1
-  }));
-}
-function seedNearestNeighbor(){
-  if (!CITY.length) return;
-  const used = new Set([0]);
-  let cur = 0;
-  const route = [0];
-  for (let k = 1; k < CITY.length; k++) {
-    let best = -1, bestD = Infinity;
-    for (let i = 0; i < CITY.length; i++) {
-      if (used.has(i)) continue;
-      const dx = CITY[cur].x - CITY[i].x, dy = CITY[cur].y - CITY[i].y;
-      const d = Math.hypot(dx,dy);
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    used.add(best); route.push(best); cur = best;
-  }
-  BEST = { route, len: routeLen(route, CITY) };
-  metrics.bestSeries.length = 0;
-  metrics.bestSeries.push({ t: 0, len: BEST.len });
-  drawCitiesAndBest(); drawChart();
-}
-
-/***** Signaling (WS + local fallback) *****/
-function sigSend(obj){
-  if (bcMode && bc) { bc.postMessage(obj); return; }
-  if (sig && sig.readyState === WebSocket.OPEN) sig.send(JSON.stringify(obj));
-}
-function openSignaling(id){
-  return new Promise((res) => {
-    if (SIGNAL_MODE === 'manual') { res(); return; } // manual mode: skip WS entirely
-    try{
-      sig = new WebSocket(SIGNAL_URL);
-      sig.onopen = () => {
-        pill($("#sigState"), "open", "ok");
-        log("WS connected", SIGNAL_URL);
-        sigSend({ type:"JOIN", room:id, peer:peerId, role:isCoord? 'coordinator':'worker' });
-        sigSend({ type:"HELLO", room:id, from:peerId, role:isCoord? 'coordinator':'worker' });
-        res();
-      };
-      sig.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } await onSignal(m); };
-      sig.onerror = () => { throw new Error("WS error"); };
-      sig.onclose = () => { pill($("#sigState"), "closed", "bad"); };
-    }catch{
-      if (bc){
-        bcMode = true;
-        pill($("#sigState"), "local", "warn");
-        setStatus("Local demo mode (no server). Open more tabs on this machine.");
-        bc.onmessage = (e)=> onSignal(e.data);
-        res();
-      }
-    }
-  });
-}
-async function onSignal(m){
-  if (SIGNAL_MODE === 'manual') return; // manual mode doesn't use WS events
-  if (m.room && m.room !== roomId) return;
-
-  if (!isCoord && m.type==='TASK_WS' && m.to===peerId && m.kind==='GA_EPOCH'){
-    const out = runEpochLocal(m.params);
-    sigSend({ type:'RESULT_WS', room:roomId, from:peerId, id:m.id, kind:'GA_EPOCH', result: out });
+function renderWorkers(){
+  if (nodes.size===0){
+    el.workerList.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No active nodes</div>';
     return;
   }
-
-  if (isCoord){
-    if (m.type==='HELLO' && m.from && m.from!==peerId){ ensurePeer(m.from).maybeConnect(); return; }
-    if (m.type==='PEER_JOINED' && m.peer){ ensurePeer(m.peer).maybeConnect(); return; }
-    if (m.type==='ANSWER' && m.from){ const p = workers.get(m.from); if (p) await p.acceptAnswer(m.sdp); return; }
-    if (m.type==='ICE' && m.from){ const p = workers.get(m.from); if (p) try{ await p.pc?.addIceCandidate(m.candidate); }catch{} return; }
-    if (m.type==='RESULT_WS' && m.from && m.kind==='GA_EPOCH'){ handleEpochResult(m.from, m.id, m.result); return; }
-  } else {
-    if (m.type==='OFFER' && (m.to===peerId || !m.to)){
-      if (!workerConn) { workerConn = new WorkerConn(); await workerConn.start(); }
-      await workerConn.acceptOffer(m.sdp, m.from);
-      return;
-    }
-    if (m.type==='ICE' && (m.to===peerId || !m.to)){
-      try { await workerConn?.pc?.addIceCandidate(m.candidate); } catch {}
-      return;
-    }
+  el.workerList.innerHTML = '';
+  for(const [id,n] of nodes){
+    const row = document.createElement('div');
+    row.className = 'worker';
+    row.innerHTML = `
+      <div>
+        <div class="worker-id">${id}</div>
+        <div class="worker-status">${n.status||'active'}</div>
+      </div>
+      <div class="perf-badge">${(n.latency??'-')} ms</div>
+      <div class="perf-badge">${(n.ops??0)} ops</div>
+    `;
+    el.workerList.appendChild(row);
   }
 }
-
-/***** Peer (coordinator) *****/
-class Peer{
-  constructor(id){
-    this.id=id; this.pc=null; this.ctrl=null; this.state='idle';
-    this.rtt=0; this._rttEMA=null; this._pingTimer=null; this.inflight=0; this.epochs=0;
-    this.wsOnly=false; this.offerRetry=null; this._everConnected=false;
-  }
-  async maybeConnect(){
-    if (SIGNAL_MODE === 'manual') return; // manual handled by mPC/mDC
-    if (this.pc || this.wsOnly || bcMode) {
-      if (bcMode) { this.wsOnly = true; enableRunIfReady(); refreshWorkersUI(); }
-      return;
-    }
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-    this.pc.onconnectionstatechange = () => {
-      const s=this.pc.connectionState; this.state=s; refreshWorkersUI();
-      if (s==='connected'){ clearInterval(this.offerRetry); this._everConnected=true; enableRunIfReady(); }
-      if (s==='failed' || s==='closed' || s==='disconnected'){
-        if (!this._everConnected){ this.wsOnly=true; refreshWorkersUI(); enableRunIfReady(); }
-      }
-    };
-    setTimeout(() => {
-      if (!this._everConnected && this.state!=='connected') {
-        this.wsOnly = true; log('RTC stall → WS fallback for', this.id.slice(0,6));
-        enableRunIfReady(); refreshWorkersUI();
-      }
-    }, 6000);
-
-    this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:this.id, from:peerId, candidate:e.candidate }); };
-
-    this.ctrl = this.pc.createDataChannel('ctrl',{ordered:true});
-    this.ctrl.onopen = ()=>{ this.state='dc-open'; this._startPings(); refreshWorkersUI(); enableRunIfReady(); };
-    this.ctrl.onmessage = (ev)=>{
-      const m = JSON.parse(ev.data);
-      if (m.type==='PONG'){ const rtt=Date.now()-m.t; this._rttEMA=this._rttEMA==null?rtt:(0.8*this._rttEMA+0.2*rtt); this.rtt=Math.round(this._rttEMA); refreshWorkersUI(); return; }
-      if (m.type==='RESULT' && m.kind==='GA_EPOCH'){
-        this.inflight=Math.max(0,this.inflight-1); this.epochs++; refreshWorkersUI(); handleEpochResult(this.id, m.id, m.result); return;
-      }
-    };
-    const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
-    sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:offer });
-    this.offerRetry = setInterval(async()=>{
-      if (this.pc?.connectionState==='connected' || this.pc?.remoteDescription?.type==='answer'){ clearInterval(this.offerRetry); return; }
-      try{ const o=await this.pc.createOffer(); await this.pc.setLocalDescription(o); sigSend({ type:'OFFER', room:roomId, to:this.id, from:peerId, sdp:o }); }catch{}
-    }, 3000);
-  }
-  async acceptAnswer(ans){ await this.pc.setRemoteDescription(ans); }
-  _startPings(){ this._pingTimer = setInterval(()=>{ this.ctrl?.send(JSON.stringify({type:'PING', t:Date.now()})); }, 4000); }
-  canSend(){ return this.wsOnly || (this.ctrl?.readyState==='open' && this.inflight<MAX_INFLIGHT_PER_WORKER); }
-  sendEpoch(job){
-    if (this.wsOnly || bcMode){
-      sigSend({ type:'TASK_WS', room:roomId, to:this.id, from:peerId, id:job.id, kind:'GA_EPOCH', params:job.params });
-      this.inflight++; return true;
-    }
-    try{ this.ctrl.send(JSON.stringify({ type:'TASK', id:job.id, kind:'GA_EPOCH', params:job.params })); this.inflight++; return true; }catch{ return false; }
-  }
-}
-function ensurePeer(id){ let p = workers.get(id); if (!p){ p=new Peer(id); workers.set(id,p); refreshWorkersUI(); enableRunIfReady(); } return p; }
-
-/***** Worker side *****/
-let workerConn = null;
-class WorkerConn{
-  constructor(){ this.pc=null; this.ctrl=null; }
-  async start(){
-    if (bcMode || SIGNAL_MODE==='manual') return; // manual/local use different path
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-    this.pc.ondatachannel = (e)=>{ if (e.channel.label==='ctrl'){ this.ctrl=e.channel; this.wireCtrl(); } };
-    this.pc.onicecandidate = (e)=>{ if(e.candidate) sigSend({ type:'ICE', room:roomId, to:'coordinator', from:peerId, candidate:e.candidate }); };
-  }
-  wireCtrl(){
-    this.ctrl.onopen = ()=>{ setStatus('Connected. Waiting for epochs…'); };
-    this.ctrl.onmessage = (ev)=>{
-      const m = JSON.parse(ev.data);
-      if (m.type==='PING'){ this.ctrl.send(JSON.stringify({type:'PONG', t:m.t})); return; }
-      if (m.type==='TASK' && m.kind==='GA_EPOCH'){
-        const res = runEpochLocal(m.params);
-        try{ this.ctrl.send(JSON.stringify({ type:'RESULT', id:m.id, kind:'GA_EPOCH', result:res })); }catch(e){ log('Send error', e?.message||e); }
-      }
-    };
-  }
-  async acceptOffer(offer, from){ await this.pc.setRemoteDescription(offer); const ans=await this.pc.createAnswer(); await this.pc.setLocalDescription(ans); sigSend({ type:'ANSWER', room:roomId, to:from, from:peerId, sdp:ans }); }
+function updateMetrics(){
+  const nodeCount = nodes.size;
+  const ops = metrics.totalOps / Math.max(1, (Date.now()-metrics.startTime)/1000);
+  el.nodeCount.textContent = nodeCount;
+  el.computePower.textContent = Math.round(ops);
+  el.performanceGain.textContent = (nodeCount>0 ? (1 + (nodeCount-1)*0.8) : 1).toFixed(1);
+  el.nodeCountBadge.textContent = `${nodeCount} active`;
+  el.nodeCountBadge.className = `status-badge ${nodeCount>0 ? 'status-active':'status-idle'}`;
+  el.bestDist.textContent = (bestSolution.distance===Infinity?'—':Math.round(bestSolution.distance));
 }
 
-/***** Manual DC wiring (fixed) *****/
-function makeManualPC(){
-  if (mPC){ try{mPC.close();}catch{} }
-  mPC = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
-  let gatherTimer=null;
-  mPC.onicecandidate = () => {
-    if (gatherTimer) clearTimeout(gatherTimer);
-    gatherTimer = setTimeout(()=>{ if (mPC.localDescription) $("#mLocal").value = pack(mPC.localDescription); }, 350);
-  };
-  mPC.onconnectionstatechange = () => {
-    const s=mPC.connectionState;
-    if (s==='connected' || s==='completed'){ mStatus('PC connected ✓','#7dff8b'); enableRunIfReady(); }
-  };
-  if (manualRole==='coordinator'){
-    mDC = mPC.createDataChannel('ctrl',{ordered:true});
-    wireManualDC(mDC,'manual');
-  } else {
-    mPC.ondatachannel = (e)=>{ mDC=e.channel; wireManualDC(mDC,'manual'); };
+/* ========= Draw ========= */
+function drawProblem(){
+  const w = el.canvas.width, h = el.canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#f8f9fa';
+  for(const c of problemData){ ctx.beginPath(); ctx.arc(c.x,c.y,4,0,Math.PI*2); ctx.fill(); }
+  if (bestSolution.route){
+    ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    const r = bestSolution.route;
+    ctx.moveTo(problemData[r[0]].x, problemData[r[0]].y);
+    for(let i=1;i<r.length;i++){ const p = problemData[r[i]]; ctx.lineTo(p.x,p.y); }
+    ctx.lineTo(problemData[r[0]].x, problemData[r[0]].y);
+    ctx.stroke();
   }
+  ctx.fillStyle = '#8892b0'; ctx.font = '14px system-ui, sans-serif';
+  ctx.fillText(`${problemData.length} cities`, 20, 30);
+  if (bestSolution.distance!==Infinity) ctx.fillText(`Best distance: ${Math.round(bestSolution.distance)}`, 20, 50);
+}
+function drawChart(){
+  const w = el.chart.width, h = el.chart.height;
+  chartCtx.clearRect(0,0,w,h);
+  if (performanceHistory.length<2) return;
+  const min = Math.min(...performanceHistory.map(p=>p.distance));
+  const max = Math.max(...performanceHistory.map(p=>p.distance));
+  const rng = (max-min)||1;
+  chartCtx.beginPath();
+  chartCtx.lineWidth = 2;
+  chartCtx.strokeStyle = '#10b981';
+  performanceHistory.forEach((p,i)=>{
+    const x = 20 + i*(w-40)/(performanceHistory.length-1);
+    const y = h-20 - ((p.distance-min)/rng)*(h-40);
+    if(i===0) chartCtx.moveTo(x,y); else chartCtx.lineTo(x,y);
+  });
+  chartCtx.stroke();
 }
 
-function wireManualDC(channel, id){
-  channel.onopen = ()=>{
-    let p = workers.get(id);
-    if (!p){ p = new Peer(id); workers.set(id,p); }
-    p.pc = mPC; p.ctrl = channel; p.state='dc-open'; p._everConnected=true;
-    refreshWorkersUI(); enableRunIfReady();
-    mStatus('DataChannel open ✓','#7dff8b');
-
-    if (isCoord) {
-      if (mPingTimer) clearInterval(mPingTimer);
-      let rttEMA = null;
-      mPingTimer = setInterval(()=>{
-        try { channel.send(JSON.stringify({type:'PING', t:Date.now()})); } catch {}
-      }, 4000);
-      p._manualRTT = (tSent)=>{
-        const rtt = Date.now() - tSent;
-        rttEMA = (rttEMA==null ? rtt : 0.8*rttEMA + 0.2*rtt);
-        p.rtt = Math.round(rttEMA);
-        refreshWorkersUI();
-      };
-    }
-  };
-
-  channel.onclose = ()=>{
-    mStatus('DC closed','#ff7d7d');
-    if (mPingTimer) { clearInterval(mPingTimer); mPingTimer=null; }
-  };
-  channel.onerror = ()=> mStatus('DC error','orange');
-
-  channel.onmessage = (ev)=>{
-    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-
-    if (isCoord) {
-      if (msg.type === 'PONG') {
-        const p = workers.get(id);
-        if (p && p._manualRTT && typeof msg.t === 'number') p._manualRTT(msg.t);
-        return;
-      }
-      if (msg.type === 'RESULT' && msg.kind === 'GA_EPOCH') {
-        const p = workers.get(id);
-        if (p) { p.inflight = Math.max(0, p.inflight - 1); p.epochs = (p.epochs||0) + 1; refreshWorkersUI(); }
-        handleEpochResult(id, msg.id, msg.result);
-        return;
-      }
-    } else {
-      if (msg.type === 'PING') {
-        try { channel.send(JSON.stringify({ type:'PONG', t:msg.t })); } catch {}
-        return;
-      }
-      if (msg.type === 'TASK' && msg.kind === 'GA_EPOCH') {
-        try {
-          const result = runEpochLocal(msg.params);
-          channel.send(JSON.stringify({ type:'RESULT', id:msg.id, kind:'GA_EPOCH', result }));
-        } catch (e) {
-          try { channel.send(JSON.stringify({ type:'RESULT', id:msg.id, kind:'GA_EPOCH', result:null })); } catch {}
-        }
-        return;
-      }
-    }
-  };
+/* ========= Problem + GA ========= */
+function generateProblem(size){
+  const w = el.canvas.width, h = el.canvas.height;
+  problemData = Array.from({length:size},()=>({
+    x: Math.random()*(w-100)+50, y: Math.random()*(h-100)+50
+  }));
+  bestSolution = { route: null, distance: Infinity };
+  performanceHistory = [];
+  drawProblem(); drawChart();
 }
-
-/***** GA scheduling (coord) *****/
-let pending = []; const inFlightById = new Map();
-let elitePool = []; // {route,len}
-let dispatchedForEpoch = 0;
-
-function planEpochJobs(){
-  const params = {
-    cities: CITY,
-    pop: parseInt($("#pop").value,10),
-    gens: parseInt($("#gens").value,10),
-    mutPct: parseFloat($("#mut").value)/100,
-    elites: parseInt($("#elites").value,10),
-    migrants: elitePool.slice(0, 12)
-  };
-  const ids = [...workers.keys()];
-  const jobs = [];
-  for (let j=0; j<JOBS_PER_WORKER; j++){
-    for (const id of ids){
-      jobs.push({ id:`ep_${epochNo}_${j}_${id.slice(0,6)}_${Math.random().toString(36).slice(2,6)}`, params });
-    }
-  }
-  return jobs;
+function createRandomRoute(n){
+  const a = [...Array(n).keys()];
+  for(let i=n-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
 }
-
-function scheduleLoop(){
-  let made=false;
-  const peers = [...workers.values()];
-  const N = peers.length || 1;
-
-  for(let guard=0; guard< pending.length * 2; guard++){
-    if (!pending.length) break;
-    let best=null, bestScore=Infinity, start = rrPtr;
-    for(let k=0;k<N;k++){
-      const p = peers[(start + k) % N];
-      if (!p || !p.canSend()) continue;
-      const score = (p.inflight||0) + 0.003*(p.rtt||120) - 0.1*(p.epochs||0);
-      if (score<bestScore){ best=p; bestScore=score; }
-    }
-    rrPtr = (rrPtr + 1) % N;
-    if (!best) break;
-
-    const job = pending.shift();
-    const ok = best.sendEpoch(job);
-    if (ok){
-      inFlightById.set(job.id, { job, peer:best.id, ts:Date.now() });
-      dispatchedForEpoch++;
-      made = true;
-      log('Dispatch', job.id, '→', best.id.slice(0,6));
-    } else {
-      pending.unshift(job);
-      break;
-    }
-  }
-  if (made) refreshWorkersUI();
-}
-
-function startEpoch(){
-  if (!running || !workers.size) return;
-  pill($("#epoch"), String(++epochNo), "ok");
-  const jobs = planEpochJobs();
-  pending = jobs;
-  dispatchedForEpoch = 0;
-  scheduleLoop();
-}
-
-/***** Results *****/
-function handleEpochResult(fromId, id, result){
-  inFlightById.delete(id);
-  metrics.epochsCompleted++;
-  metrics.epochWindow.push(performance.now());
-  updateThroughput();
-
-  if (!result || !result.best || !isFinite(result.best.len)){
-    log("WARN: bad result from", String(fromId).slice(0,6));
-  } else if (result.best.len < BEST.len){
-    BEST = result.best;
-    drawCitiesAndBest();
-    metrics.bestSeries.push({t: performance.now()-metrics.startTs, len: BEST.len});
-    drawChart();
-    log("New BEST", BEST.len.toFixed(2), "from", String(fromId).slice(0,6));
-  }
-  if (result?.elites?.length){
-    elitePool.push(...result.elites);
-    elitePool.sort((a,b)=>a.len-b.len);
-    if (elitePool.length>200) elitePool.length = 200;
-  }
-
-  const stillInThisEpoch = [...inFlightById.keys()].some(k => k.startsWith(`ep_${epochNo}_`));
-  const stillQueued = pending.some(j => j.id.startsWith(`ep_${epochNo}_`));
-  const allReturned = !stillInThisEpoch && !stillQueued && dispatchedForEpoch > 0;
-
-  if (allReturned && running) startEpoch();
-}
-
-/***** Timeout / requeue *****/
-setInterval(()=>{
-  const now=Date.now();
-  for (const [id, rec] of [...inFlightById]){
-    if (now - rec.ts > EPOCH_TIMEOUT_MS){
-      log('Epoch task timeout → requeue', id);
-      pending.push(rec.job);
-      inFlightById.delete(id);
-      const p = workers.get(rec.peer); if (p){ p.inflight=Math.max(0,p.inflight-1); refreshWorkersUI(); }
-    }
-  }
-  if (pending.length) scheduleLoop();
-  else if (running && inFlightById.size===0) startEpoch();
-}, 800);
-
-/***** GA core (shared) *****/
-function routeLen(route, cities){
+function dist(route,cities){
   let s=0, n=route.length;
-  for (let i=0;i<n;i++){
-    const a=cities[route[i]], b=cities[route[(i+1)%n]];
-    const dx=a.x-b.x, dy=a.y-b.y; s += Math.hypot(dx,dy);
+  for(let i=0;i<n;i++){
+    const A = cities[route[i]], B = cities[route[(i+1)%n]];
+    s += Math.hypot(A.x-B.x, A.y-B.y);
   }
   return s;
 }
-function randPerm(n){
-  const arr=Array.from({length:n},(_,i)=>i);
-  for(let i=n-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
-  return arr;
+function selectParent(pop, fit){
+  const k=3; let best= (Math.random()*pop.length)|0;
+  for(let i=1;i<k;i++){ const idx=(Math.random()*pop.length)|0; if (fit[idx]>fit[best]) best=idx; }
+  return pop[best];
 }
-function mutateSwap(route){
-  const a=(Math.random()*route.length)|0, b=(Math.random()*route.length)|0;
-  [route[a],route[b]]=[route[b],route[a]];
-}
-function oxCrossover(p1,p2){
-  const n=p1.length, a=(Math.random()*n)|0, b=(Math.random()*n)|0;
-  const lo=Math.min(a,b), hi=Math.max(a,b);
-  const child=new Array(n).fill(-1);
-  const used = new Uint8Array(n);
-  for(let i=lo;i<=hi;i++){ child[i]=p1[i]; used[p1[i]] = 1; }
-  let pos=(hi+1)%n;
-  for(let i=0;i<n;i++){
-    const gene=p2[(hi+1+i)%n];
-    if (!used[gene]){
-      child[pos]=gene; used[gene]=1; pos=(pos+1)%n;
-    }
-  }
+function crossover(p1,p2){
+  const n=p1.length, start=(Math.random()*n)|0, end=start+((Math.random()*(n-start))|0);
+  const child = new Array(n).fill(-1), used=new Set();
+  for(let i=start;i<=end;i++){ child[i]=p1[i]; used.add(p1[i]); }
+  let pos=(end+1)%n;
+  for(let i=0;i<n;i++){ const g=p2[(end+1+i)%n]; if(!used.has(g)){ child[pos]=g; pos=(pos+1)%n; } }
   return child;
 }
-function tournament(pop, fit, k=3){
-  let best=-1, bestF=Infinity;
-  for(let i=0;i<k;i++){
-    const idx=(Math.random()*pop.length)|0;
-    if (fit[idx]<bestF){ bestF=fit[idx]; best=idx; }
-  }
-  return best;
-}
-function runEpochLocal(p){
-  const cities = p.cities, N = cities.length;
-  const popSize = p.pop|0, gens = p.gens|0, mutProb = p.mutPct||0.05;
-  const migrants = (p.migrants||[]).slice(0, Math.min(20, popSize>>2)).map(e=>e.route.slice());
-  const pop = []; for (const m of migrants) pop.push(m.slice()); while (pop.length<popSize) pop.push(randPerm(N));
-  const fit = new Array(pop.length);
-  const evalAll = ()=>{ for (let i=0;i<pop.length;i++) fit[i]=routeLen(pop[i], cities); };
-  evalAll();
-  for (let g=0; g<gens; g++){
-    const next = [];
-    let idxs = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]).slice(0,2);
-    next.push(pop[idxs[0]].slice(), pop[idxs[1]].slice());
-    while (next.length < popSize){
-      const a = pop[tournament(pop,fit,3)], b = pop[tournament(pop,fit,3)];
-      let child = oxCrossover(a,b);
-      if (Math.random()<mutProb) mutateSwap(child);
+function mutate(r){ const i=(Math.random()*r.length)|0, j=(Math.random()*r.length)|0; [r[i],r[j]]=[r[j],r[i]]; return r; }
+function runEpoch(cities,{populationSize=60,generations=25,mutationRate=0.1}){
+  let pop = Array.from({length:populationSize},()=>createRandomRoute(cities.length));
+  let bestR=null, bestD=Infinity;
+  for(let g=0; g<generations; g++){
+    const fitness = pop.map(r=>1/dist(r,cities));
+    for(let i=0;i<pop.length;i++){ const d=1/fitness[i]; if (d<bestD){ bestD=d; bestR=[...pop[i]]; } }
+    const next=[...bestR];
+    while(next.length<populationSize){
+      const a=selectParent(pop, fitness), b=selectParent(pop, fitness);
+      let child=crossover(a,b);
+      if (Math.random()<mutationRate) child=mutate(child);
       next.push(child);
     }
-    pop.length=0; Array.prototype.push.apply(pop, next);
-    evalAll();
+    pop = next;
   }
-  const order = [...pop.keys()].sort((a,b)=>fit[a]-fit[b]);
-  const elites = order.slice(0, p.elites||5).map(i=>({ route: pop[i].slice(), len: fit[i] }));
-  const best = elites[0];
-  return { best, elites };
+  return { route: bestR, distance: bestD };
 }
 
-/***** Controls *****/
-$("#start").onclick = async () => {
-  try {
-    $("#start").disabled = true; isCoord = true;
-    roomId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2,10)).replace(/-/g,'');
-    if (SIGNAL_MODE === 'manual') {
-      pill($("#sigState"), "manual", "warn");
-      setStatus("Manual mode: create an offer below and connect a worker via copy/paste.");
-      enableRunIfReady();
-      return;
-    }
-    setStatus("Creating session…"); await openSignaling(roomId);
-    const base = location.origin + location.pathname; const url = base + `#room=${roomId}&role=worker`;
-    $("#invite").value = url;
-    $("#copy").onclick = () => navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#share").onclick = () => navigator.share ? navigator.share({title:"NyxMesh Session",text:"Join my mesh",url}) : navigator.clipboard.writeText(url).then(()=>setStatus("Invite copied."));
-    $("#qr").onclick = () => showQR(url);
-    $("#open").onclick = (e) => {
-      const count = e.shiftKey ? 5 : 1;
-      for (let i=0;i<count;i++){ const w = window.open('about:blank'); if (w) w.location.href = url; }
-    };
-    $("#open").disabled = true;
-    setStatus("Session live. Recruit peers with the link or QR.");
-  } catch (e) {
-    setStatus("Failed to start: " + (e?.message||e)); $("#start").disabled=false;
-  }
-};
-$("#run").onclick = () => {
-  if (!workers.size){ setStatus("No workers connected"); return; }
-  const n = parseInt($("#cities").value,10);
-  if ($("#reset").value==='yes' || CITY.length!==n){
-    genCities(n);
-    seedNearestNeighbor();
-  }
-  running = true; epochNo=0; elitePool.length=0;
-  $("#run").disabled=true; $("#stop").disabled=false; $("#snapshot").disabled=false; $("#export").disabled=false;
-  setStatus(`Optimizing TSP: ${n} cities • ${workers.size} workers`);
-  metrics.startTs = performance.now();
-  metrics.epochsCompleted = 0; metrics.epochWindow.length=0;
-  startEpoch();
-};
-$("#stop").onclick = () => {
-  running=false; pending.length=0; setStatus("Stopped."); $("#run").disabled=false; $("#stop").disabled=true;
-};
-$("#snapshot").onclick = () => {
-  const a=document.createElement('a'); a.download=`tsp_best_${CITY.length}.png`; a.href=canvas.toDataURL('image/png'); a.click();
-};
-$("#export").onclick = () => {
-  const rows = [["t_ms","best_len_px"], ...metrics.bestSeries.map(d=>[d.t.toFixed(1), d.len.toFixed(4)])];
-  const csv = rows.map(r=>r.join(",")).join("\n");
-  const blob = new Blob([csv], {type:"text/csv"}); const url = URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download="nyxmesh_run.csv"; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 500);
-};
+/* ========= Messaging (BroadcastChannel) ========= */
+function send(m){ if(!bc) return; bc.postMessage({ ...m, sessionId, from: peerId }); }
+if (bc){
+  bc.onmessage = (e)=>{
+    const m = e.data || {};
+    if (!sessionId || m.sessionId!==sessionId) return;
+    if (m.to && m.to!==peerId) return;
 
-/***** Enable run when usable *****/
-function enableRunIfReady(){
-  if (!isCoord) return;
-  const anyUsable = [...workers.values()].some(p => p.wsOnly || p.ctrl?.readyState==='open');
-  $("#run").disabled = !anyUsable;
-  $("#open").disabled = false;
-  if (anyUsable) setStatus('Ready. Recruit peers and press ▶️ Start Optimization.');
+    switch(m.type){
+      case 'HELLO':
+        if (isCoordinator){
+          nodes.set(m.from,{status:'connected', latency: Math.round(50+Math.random()*120), ops: 0});
+          send({type:'WELCOME', to:m.from});
+          updateMetrics(); renderWorkers();
+          log(`📱 Worker joined: ${m.from}`);
+        }
+        break;
+      case 'WELCOME':
+        if (!isCoordinator){ setStatus('active','Connected as Worker'); log('✅ Connected to coordinator'); }
+        break;
+      case 'TASK':
+        if (!isCoordinator){
+          const res = runEpoch(m.cities, m.params);
+          send({type:'RESULT', to:m.from, result: res});
+        }
+        break;
+      case 'RESULT':
+        if (isCoordinator && m.result){
+          metrics.totalOps++;
+          const r = m.result;
+          if (r.distance < bestSolution.distance){
+            bestSolution = r;
+            performanceHistory.push({time:Date.now(), distance:r.distance});
+            drawProblem(); drawChart();
+            updateMetrics();
+            log(`🎯 Improved solution: ${Math.round(r.distance)} by ${m.from}`);
+          }
+          const n = nodes.get(m.from); if (n){ n.ops++; renderWorkers(); }
+        }
+        break;
+      case 'BYE':
+        if (isCoordinator){ nodes.delete(m.from); renderWorkers(); updateMetrics(); log(`👋 Worker left: ${m.from}`); }
+        break;
+    }
+  };
 }
 
-/***** Auto-join as worker (skip in manual mode) *****/
-(async ()=>{
-  const params = new URLSearchParams(location.hash.slice(1));
-  const rid = params.get('room'); const role = params.get('role');
-  if (!rid) return;
-  if (SIGNAL_MODE === 'manual') return; // manual uses copy/paste only
-  roomId = rid; isCoord = (role !== 'worker');
-  setStatus(isCoord? 'Coordinator mode' : 'Joining as worker…'); log(isCoord? 'Coordinator' : 'Worker', 'peerId=', peerId, 'room=', roomId);
-  try {
-    await openSignaling(roomId);
-    if (!isCoord){
-      if (bcMode) sigSend({ type:"HELLO", room:roomId, from:peerId, role:'worker' });
-      workerConn = new WorkerConn(); await workerConn.start();
-      $("#start").disabled=true; $("#run").disabled=true;
-    } else {
-      if (bcMode) sigSend({ type:"HELLO", room:roomId, from:peerId, role:'coordinator' });
-      enableRunIfReady();
+/* ========= Demo Flow ========= */
+function joinLink(){ return location.href.split('#')[0] + '#join=' + sessionId; }
+
+function startDemo(){
+  if (!bc){ alert('Your browser does not support BroadcastChannel. Try a modern browser.'); return; }
+  sessionId = Math.random().toString(36).slice(2,10);
+  isCoordinator = true; demoRunning = true;
+  setStatus('active','Coordinator running');
+  showSession();
+  el.inviteSection.style.display = 'block';
+  el.runOptimization.disabled = false;
+  metrics.startTime = Date.now();
+  nodes.clear(); renderWorkers(); updateMetrics();
+  const link = joinLink();
+  el.inviteUrl.textContent = `Join link: ${link}`;
+  log(`🚀 Session started • ID ${sessionId}`);
+  log('Open this file in new tabs or share the join link. Then click “Join as Worker” there.');
+
+  // Dispatch tasks every 1.5s
+  const loop = setInterval(()=>{
+    if (!demoRunning || !isCoordinator) { clearInterval(loop); return; }
+    if (nodes.size===0 || !optimizationRunning) return;
+    for (const [id] of nodes){
+      send({type:'TASK', to:id, cities: problemData, params: {
+        populationSize: 30 + (+el.work.value)*3,
+        generations: 10 + (+el.work.value)*2,
+        mutationRate: 0.08
+      }});
     }
-  } catch(e){ setStatus('Join failed: ' + (e?.message||e)); }
-})();
+  }, 1500);
+}
 
-/***** Baseline (single-browser 30s) *****/
-$("#baseline").onclick = async () => {
-  const n = parseInt($("#cities").value,10);
-  if (CITY.length!==n) { genCities(n); seedNearestNeighbor(); }
-  const params = {
-    cities: CITY, pop: parseInt($("#pop").value,10),
-    gens: parseInt($("#gens").value,10), mutPct: parseFloat($("#mut").value)/100,
-    elites: parseInt($("#elites").value,10), migrants: []
-  };
-  const end = performance.now()+30000; let count=0;
-  setStatus("Running 30s local baseline…");
-  while (performance.now()<end){ runEpochLocal(params); count++; }
-  metrics.localBaselineEPS = count/30;
-  $("#kSpeedup").textContent = "1.0×";
-  setStatus(`Baseline measured: ${metrics.localBaselineEPS.toFixed(2)} epochs/sec on this device.`);
-};
-
-/***** QR (hosted) *****/
-function showQR(data){
-  let div = document.getElementById('qrModal'); if (!div){
-    div = document.createElement('div'); div.id='qrModal'; div.style.position='fixed'; div.style.inset='0'; div.style.background='rgba(0,0,0,.6)'; div.style.display='grid'; div.style.placeItems='center'; div.style.zIndex='9999';
-    const inner = document.createElement('div'); inner.style.background='#12121a'; inner.style.border='1px solid #2b2b3a'; inner.style.borderRadius='12px'; inner.style.padding='14px'; inner.style.textAlign='center';
-    const img = document.createElement('img'); img.id='qrImg'; img.width=220; img.height=220; img.alt='QR'; img.style.borderRadius='10px'; img.style.background='#fff';
-    const p = document.createElement('div'); p.className='mono'; p.style.wordBreak='break-all'; p.style.marginTop='8px'; p.textContent=data;
-    const c = document.createElement('button'); c.className='btn secondary'; c.textContent='Close'; c.onclick=()=>div.remove();
-    inner.appendChild(img); inner.appendChild(p); inner.appendChild(c); div.appendChild(inner); document.body.appendChild(div);
+function joinDemo(){
+  if (!sessionId){
+    const guess = prompt('Enter Session ID (visible on coordinator):', '');
+    if (!guess) return;
+    sessionId = guess.trim();
   }
-  const img = document.getElementById('qrImg');
-  const api = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(data);
-  img.src = api;
+  isCoordinator = false; demoRunning = true;
+  setStatus('connecting','Joining…');
+  showSession();
+  send({type:'HELLO'});
 }
 
-/* In local fallback mode, emulate peer presence when tabs join */
-if (bcMode && bc){
-  window.addEventListener('load', () => {
-    if (roomId) sigSend({ type:"PEER_JOINED", room:roomId, peer:peerId });
-  });
+function runOptimization(){
+  if (!isCoordinator){ alert('Only the coordinator starts the optimization.'); return; }
+  generateProblem(parseInt(el.size.value,10));
+  optimizationRunning = true;
+  el.runOptimization.disabled = true;
+  log(`🎯 Optimization started • ${problemData.length} cities • workload ${el.work.value}/10`);
 }
 
-/***** Wire manual-mode UI *****/
-(function wireManualUI(){
-  const modeSel = $("#sigMode");
-  const roleSel = $("#manualRole");
-  const box = $("#manualBox");
-  if (!modeSel) return;
+function openWorkerTab(){
+  const url = location.href.split('#')[0] + '#join=' + (sessionId||'');
+  const w = window.open(url, '_blank');
+  if (!w) log('❌ Popup blocked — allow popups or open a new tab manually');
+}
 
-  modeSel.addEventListener('change', () => {
-    SIGNAL_MODE = modeSel.value;
-    box.style.display = (SIGNAL_MODE==='manual') ? 'block' : 'none';
-    if (SIGNAL_MODE==='manual'){
-      pill($("#sigState"), "manual", "warn");
-      setStatus("Manual mode: use the box to exchange Base64 offers/answers.");
-      mReset();
-    } else {
-      setStatus("Auto mode: WS/BroadcastChannel (as available).");
-    }
-  });
-  roleSel.addEventListener('change', () => { manualRole = roleSel.value; mReset(); });
+/* ========= Controls ========= */
+el.startDemo.addEventListener('click', startDemo);
+el.joinDemo.addEventListener('click', joinDemo);
+el.runOptimization.addEventListener('click', runOptimization);
+el.openWorker.addEventListener('click', openWorkerTab);
+el.size.addEventListener('input', e=> el.sizeLabel.textContent = e.target.value);
+el.work.addEventListener('input', e=> el.workLabel.textContent = `${e.target.value}/10`);
+el.copyIdBtn.addEventListener('click', async ()=>{
+  if (!sessionId) return;
+  try{ await navigator.clipboard.writeText(sessionId); log('📋 Session ID copied'); }catch{}
+});
+el.copyLinkBtn.addEventListener('click', async ()=>{
+  if (!sessionId) return;
+  const link = joinLink();
+  try{ await navigator.clipboard.writeText(link); log('📋 Join link copied'); }catch{}
+});
 
-  $("#mCreate").onclick = async ()=>{
-    if (!mPC) makeManualPC();
-    if (manualRole==='coordinator'){
-      const offer = await mPC.createOffer();
-      await mPC.setLocalDescription(offer);
-      mStatus('Gathering ICE for offer…');
-    } else {
-      if (!mPC.remoteDescription){ mStatus('Set remote offer first','#ffe57d'); return; }
-      const answer = await mPC.createAnswer();
-      await mPC.setLocalDescription(answer);
-      mStatus('Gathering ICE for answer…');
-    }
-  };
-  $("#mSetRemote").onclick = async ()=>{
-    try{
-      const raw = ($("#mRemote").value||'').trim();
-      if (!raw){ mStatus('Paste peer blob first','#ffe57d'); return; }
-      let desc;
-      if (looksLikeJson(raw)) desc = JSON.parse(raw);
-      else if (/^[A-Za-z0-9+/=\s]+$/.test(raw) && !looksLikeSdp(raw)) desc = unpackBase64(raw.replace(/\s+/g,''));
-      else if (looksLikeSdp(raw)) desc = { type: (manualRole==='coordinator'?'answer':'offer'), sdp: raw };
-      else throw new Error('Unrecognized blob format');
-      if (!mPC) makeManualPC();
-      await mPC.setRemoteDescription(desc);
-      mStatus(`Remote ${desc.type} set`);
-    }catch(e){ console.error(e); mStatus('Invalid blob','#ff7d7d'); }
-  };
-  $("#mCopy").onclick = async ()=>{
-    const t = ($("#mLocal").value||'').trim();
-    if (!t){ mStatus('Nothing to copy','#ffe57d'); return; }
-    try{ await navigator.clipboard.writeText(t); mStatus('Copied Base64 ✓','#7dff8b'); }catch{ mStatus('Copy failed','#ff7d7d'); }
-  };
-  $("#mReset").onclick = mReset;
-})();
+/* ========= Housekeeping ========= */
+window.addEventListener('beforeunload', ()=>{ if (demoRunning) send({type:'BYE'}); });
+
+/* ========= Metrics tick ========= */
+setInterval(()=>{
+  if (!demoRunning) return;
+  updateMetrics();
+  for(const [id,n] of nodes){ n.latency = Math.max(20, (n.latency||80) + (Math.random()*20-10)|0); }
+  renderWorkers();
+}, 1000);
+
+/* ========= Quick join via #join=ID ========= */
+window.addEventListener('load', ()=>{
+  const m = location.hash.match(/join=([a-z0-9]+)/i);
+  if (m){ sessionId = m[1]; showSession(); joinDemo(); }
+});
+
+/* ========= Hint ========= */
+log('Tip: Start Demo in one tab, then open 2–3 more tabs → Join as Worker.');
 </script>
 </body>
 </html>
