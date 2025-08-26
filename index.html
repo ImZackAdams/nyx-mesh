@@ -164,12 +164,12 @@
       <label class="mono" style="font-size:12px;color:var(--muted)">Your description (Base64)</label>
       <textarea id="mrLocal" rows="5" class="mono" placeholder="Your Base64 blob will appear here…" readonly></textarea>
       <label class="mono" style="font-size:12px;color:var(--muted);margin-top:8px;display:block">Peer description (paste here)</label>
-      <textarea id="mrRemote" rows="5" class="mono" placeholder="Paste the other side’s blob here…"></textarea>
+      <textarea id="mrRemote" rows="5" class="mono" placeholder="Paste the other side's blob here…"></textarea>
       <div class="controls" style="margin-top:8px">
         <button id="mrSetRemote" class="btn btn-secondary">Set Remote</button>
         <span id="mrState" class="status-badge status-idle">idle</span>
       </div>
-      <div style="font-size:12px;color:var(--muted)">Tip: for reliability, run via http://localhost (not file://). On Zoom, paste blobs in chat.</div>
+      <div style="font-size:12px;color:var(--muted)">Tip: run via http://localhost (not file://). On Zoom, paste blobs in chat.</div>
     </div>
 
     <!-- Active Nodes -->
@@ -182,19 +182,16 @@
   <!-- Visualization Panel -->
   <div class="card">
     <h2>🎯 Live Optimization Demo</h2>
-    <div class="subtitle">Traveling Salesman Problem - Real-time distributed solving</div>
+    <div class="subtitle">Traveling Salesman Problem — Real-time distributed solving</div>
 
-    <!-- Problem Visualization -->
     <canvas id="problemCanvas" width="800" height="500"></canvas>
 
-    <!-- Performance Chart -->
     <h3>Performance Over Time</h3>
     <canvas id="performanceChart" width="800" height="120"></canvas>
     <div style="font-size:12px;color:var(--muted);margin-top:8px">
       Solution quality improves as more nodes join the computation
     </div>
 
-    <!-- Activity Log -->
     <h3>System Activity</h3>
     <div id="activityLog" class="activity-log">
       <div style="color:var(--accent)">NyxMesh Distributed Computing Platform v2.0</div>
@@ -204,43 +201,66 @@
 </div>
 
 <script>
-// ====== Core State ======
-const peerId = crypto.randomUUID?.()?.replace(/-/g,'') || Math.random().toString(36).slice(2,10);
+'use strict';
+
+/* ==== Helpers ==== */
+function makeId(len = 16) {
+  try { if (crypto?.randomUUID) return crypto.randomUUID().replace(/-/g,'').slice(0,len); } catch {}
+  return (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, len);
+}
+const safeClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+/* ==== Core State ==== */
+const peerId = makeId(16);
 let sessionId = null;
 let isCoordinator = false;
 let demoRunning = false;
 let optimizationRunning = false;
-const nodes = new Map(); // <— ensure defined
+let optimizationInterval = null;
+const nodes = new Map(); // id -> NetworkPeer (coordinator view)
 
-// Real networking configuration (kept, but manual WebRTC works without it)
+/* ==== Networking config (optional) ==== */
 const DEFAULT_SIGNAL_URL = (location.protocol === "https:" ? "wss://" : "ws://")
   + ((location.hostname && location.hostname !== "") ? location.hostname : "localhost")
   + ":" + ((location.port && location.port !== "") ? location.port : "8080");
 let SIGNAL_URL = DEFAULT_SIGNAL_URL;
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
-// WebSocket signaling (optional)
+/* ==== Signaling (WS + local fallback) ==== */
 let signalSocket = null;
 const broadcastChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('nyxmesh-demo') : null;
 let localFallbackMode = false;
 
-// ====== NetworkPeer class (unchanged core) ======
+/* ==== NetworkPeer ==== */
 class NetworkPeer {
   constructor(id) {
     this.id = id;
-    this.pc = null; // RTCPeerConnection
+    this.pc = null;
     this.dataChannel = null;
     this.status = 'connecting';
     this.latency = 0;
     this.operations = 0;
     this.cpu = 0;
     this._lastPing = 0;
+    this._pingTimer = null;
   }
   async connect() {
     try {
-      this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-      this.pc.onconnectionstatechange = () => { this.status = this.pc.connectionState; if (this.status === 'connected') { log(`✅ Peer connected: ${this.id.slice(0, 8)}`); } renderWorkerList(); };
-      this.pc.onicecandidate = (event) => { if (event.candidate) { sendSignal({ type: 'ice', to: this.id, candidate: event.candidate }); } };
+      this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 });
+      this.pc.onconnectionstatechange = () => {
+        this.status = this.pc.connectionState;
+        if (this.status === 'connected') log(`✅ Peer connected: ${this.id.slice(0, 8)}`);
+        renderWorkerList();
+      };
+      this.pc.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        const cand = event.candidate.toJSON ? event.candidate.toJSON() : {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        };
+        sendSignal({ type: 'ice', to: this.id, candidate: cand });
+      };
       if (isCoordinator) {
         this.dataChannel = this.pc.createDataChannel('compute', { ordered: true });
         this.setupDataChannel();
@@ -250,23 +270,46 @@ class NetworkPeer {
       } else {
         this.pc.ondatachannel = (event) => { this.dataChannel = event.channel; this.setupDataChannel(); };
       }
-    } catch (error) { log(`❌ Connection failed to ${this.id.slice(0, 8)}: ${error.message}`); this.status = 'failed'; }
-  }
-  setupDataChannel() {
-    this.dataChannel.onopen = () => { this.status = 'connected'; log(`🔗 DataChannel ready: ${this.id.slice(0, 8)}`); renderWorkerList(); if (isCoordinator) this.startPingLoop(); };
-    this.dataChannel.onmessage = (event) => { const message = JSON.parse(event.data); this.handleMessage(message); };
-    this.dataChannel.onerror = (error) => { log(`⚠️ DataChannel error: ${error}`); };
-  }
-  startPingLoop() { setInterval(() => { if (this.dataChannel?.readyState === 'open') { this._lastPing = Date.now(); this.send({ type: 'ping', timestamp: this._lastPing }); } }, 5000); }
-  handleMessage(message) {
-    switch (message.type) {
-      case 'ping': if (!isCoordinator) { this.send({ type: 'pong', timestamp: message.timestamp }); } break;
-      case 'pong': if (isCoordinator) { this.latency = Date.now() - message.timestamp; renderWorkerList(); } break;
-      case 'compute_task': if (!isCoordinator) { this.handleComputeTask(message); } break;
-      case 'compute_result': if (isCoordinator) { this.handleComputeResult(message); } break;
+    } catch (error) {
+      log(`❌ Connection failed to ${this.id.slice(0, 8)}: ${error.message}`);
+      this.status = 'failed';
     }
   }
-  send(message) { if (this.dataChannel?.readyState === 'open') { this.dataChannel.send(JSON.stringify(message)); } }
+  setupDataChannel() {
+    this.dataChannel.onopen = () => {
+      this.status = 'connected';
+      log(`🔗 DataChannel ready: ${this.id.slice(0, 8)}`);
+      renderWorkerList();
+      if (isCoordinator) this.startPingLoop();
+    };
+    this.dataChannel.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      this.handleMessage(message);
+    };
+    this.dataChannel.onerror = (error) => { log(`⚠️ DataChannel error: ${error}`); };
+  }
+  startPingLoop() {
+    clearInterval(this._pingTimer);
+    this._pingTimer = setInterval(() => {
+      if (this.dataChannel?.readyState === 'open') {
+        this._lastPing = Date.now();
+        this.send({ type: 'ping', timestamp: this._lastPing });
+      }
+    }, 5000);
+  }
+  handleMessage(message) {
+    switch (message.type) {
+      case 'ping': if (!isCoordinator) this.send({ type: 'pong', timestamp: message.timestamp }); break;
+      case 'pong': if (isCoordinator) { this.latency = Date.now() - message.timestamp; renderWorkerList(); } break;
+      case 'compute_task': if (!isCoordinator) this.handleComputeTask(message); break;
+      case 'compute_result': if (isCoordinator) this.handleComputeResult(message); break;
+    }
+  }
+  send(message) {
+    if (this.dataChannel?.readyState === 'open') {
+      this.dataChannel.send(JSON.stringify(message));
+    }
+  }
   handleComputeTask(message) {
     const result = performOptimizationStep(message.problemData, message.parameters);
     this.send({ type: 'compute_result', taskId: message.taskId, result });
@@ -274,16 +317,23 @@ class NetworkPeer {
   }
   handleComputeResult(message) {
     if (message.result && message.result.distance < bestSolution.distance) {
-      bestSolution = message.result; drawProblem(); log(`🎯 Better solution: ${Math.round(bestSolution.distance)} from ${this.id.slice(0, 8)}`);
+      bestSolution = message.result;
+      drawProblem();
+      log(`🎯 Better solution: ${Math.round(bestSolution.distance)} from ${this.id.slice(0, 8)}`);
     }
     computeMetrics.totalOperations++; this.operations++;
   }
-  async acceptOffer(offer) { await this.pc.setRemoteDescription(offer); const answer = await this.pc.createAnswer(); await this.pc.setLocalDescription(answer); sendSignal({ type: 'answer', to: this.id, sdp: answer }); }
+  async acceptOffer(offer) {
+    await this.pc.setRemoteDescription(offer);
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answer);
+    sendSignal({ type: 'answer', to: this.id, sdp: answer });
+  }
   async acceptAnswer(answer) { await this.pc.setRemoteDescription(answer); }
-  async addIceCandidate(candidate) { try { await this.pc.addIceCandidate(candidate); } catch (error) { console.warn('Failed to add ICE candidate:', error); } }
+  async addIceCandidate(candidate) { try { await this.pc.addIceCandidate(candidate); } catch (e) { console.warn('Failed to add ICE candidate:', e); } }
 }
 
-// ====== Signaling helpers (optional) ======
+/* ==== Signaling helpers ==== */
 function connectToSignalServer() {
   return new Promise((resolve, reject) => {
     try {
@@ -294,44 +344,109 @@ function connectToSignalServer() {
         sendSignal({ type: 'join', sessionId, peerId, role: isCoordinator ? 'coordinator' : 'worker' });
         resolve();
       };
-      signalSocket.onmessage = (event) => { try { const message = JSON.parse(event.data); handleSignalMessage(message); } catch (error) { console.warn('Invalid signal message:', error); } };
+      signalSocket.onmessage = (event) => {
+        try { const message = JSON.parse(event.data); handleSignalMessage(message); }
+        catch (error) { console.warn('Invalid signal message:', error); }
+      };
       signalSocket.onerror = () => { reject(new Error('WebSocket connection failed')); };
-      signalSocket.onclose = () => { if (demoRunning) { updateNetworkStatus('connecting', 'Reconnecting...'); log('⚠️ Signal server disconnected, attempting reconnect...'); setTimeout(() => { if (demoRunning) connectToSignalServer().catch(() => {}); }, 3000); } };
+      signalSocket.onclose = () => {
+        if (demoRunning) {
+          updateNetworkStatus('connecting', 'Reconnecting...');
+          log('⚠️ Signal server disconnected, attempting reconnect...');
+          setTimeout(() => { if (demoRunning) connectToSignalServer().catch(() => {}); }, 3000);
+        }
+      };
     } catch (error) {
-      if (broadcastChannel) { localFallbackMode = true; updateNetworkStatus('active', 'Local Demo Mode'); log('📱 Using local BroadcastChannel (no server needed)'); broadcastChannel.onmessage = (event) => { handleSignalMessage(event.data); }; resolve(); }
-      else { reject(error); }
+      // If constructor throws (e.g., file://), fallback immediately
+      if (broadcastChannel) {
+        localFallbackMode = true;
+        updateNetworkStatus('active', 'Local Demo Mode');
+        log('📱 Using local BroadcastChannel (no server needed)');
+        broadcastChannel.onmessage = (event) => handleSignalMessage(event.data);
+        resolve();
+      } else { reject(error); }
+    }
+  }).catch(() => {
+    // Fallback if WS failed asynchronously
+    if (broadcastChannel) {
+      localFallbackMode = true;
+      updateNetworkStatus('active', 'Local Demo Mode');
+      log('📱 Using local BroadcastChannel (no server needed)');
+      broadcastChannel.onmessage = (event) => handleSignalMessage(event.data);
     }
   });
 }
-function sendSignal(message) { message.from = peerId; message.sessionId = sessionId; if (localFallbackMode && broadcastChannel) broadcastChannel.postMessage(message); else if (signalSocket?.readyState === WebSocket.OPEN) signalSocket.send(JSON.stringify(message)); }
+
+function sendSignal(message) {
+  // Ensure structured-clone-safe payloads
+  let m = { ...message, from: peerId, sessionId };
+  if (m.type === 'ice' && m.candidate && typeof m.candidate.toJSON === 'function') {
+    m.candidate = m.candidate.toJSON();
+  }
+  // Deep clone to avoid DOM objects slipping through
+  m = safeClone(m);
+  if (localFallbackMode && broadcastChannel) {
+    broadcastChannel.postMessage(m);
+  } else if (signalSocket?.readyState === WebSocket.OPEN) {
+    signalSocket.send(JSON.stringify(m));
+  }
+}
+
 async function handleSignalMessage(message) {
   if (message.sessionId !== sessionId) return;
   switch (message.type) {
-    case 'peer_joined':
-      if (isCoordinator && message.from !== peerId) { log(`📱 New peer joined: ${message.from.slice(0, 8)}`); const peer = new NetworkPeer(message.from); nodes.set(message.from, peer); await peer.connect(); updateMetrics(); }
+    case 'peer_joined': {
+      // In local bc-mode, skip auto-RTC; use Manual WebRTC panel instead.
+      if (localFallbackMode) {
+        log('📱 Peer joined (local mode) — use Manual WebRTC to connect');
+        updateMetrics();
+        break;
+      }
+      if (isCoordinator && message.from !== peerId) {
+        log(`📱 New peer joined: ${message.from.slice(0, 8)}`);
+        const peer = new NetworkPeer(message.from);
+        nodes.set(message.from, peer);
+        await peer.connect();
+        updateMetrics();
+      }
       break;
+    }
     case 'offer':
-      if (!isCoordinator && message.to === peerId) { const peer = new NetworkPeer(message.from); nodes.set(message.from, peer); await peer.connect(); await peer.acceptOffer(message.sdp); }
+      if (!isCoordinator && message.to === peerId) {
+        const peer = new NetworkPeer(message.from);
+        nodes.set(message.from, peer);
+        await peer.connect();
+        await peer.acceptOffer(message.sdp);
+      }
       break;
     case 'answer':
-      if (isCoordinator && message.to === peerId) { const peer = nodes.get(message.from); if (peer) { await peer.acceptAnswer(message.sdp); } }
+      if (isCoordinator && message.to === peerId) {
+        const peer = nodes.get(message.from);
+        if (peer) await peer.acceptAnswer(message.sdp);
+      }
       break;
-    case 'ice':
-      const peer = nodes.get(message.from); if (peer && message.to === peerId) { await peer.addIceCandidate(message.candidate); }
+    case 'ice': {
+      const peer = nodes.get(message.from);
+      if (peer && message.to === peerId) await peer.addIceCandidate(message.candidate);
       break;
+    }
     case 'peer_left':
-      if (nodes.has(message.from)) { nodes.delete(message.from); log(`📱 Peer left: ${message.from.slice(0, 8)}`); updateMetrics(); renderWorkerList(); }
+      if (nodes.has(message.from)) {
+        nodes.delete(message.from);
+        log(`📱 Peer left: ${message.from.slice(0, 8)}`);
+        updateMetrics(); renderWorkerList();
+      }
       break;
   }
 }
 
-// ====== Optimization State ======
+/* ==== Optimization State ==== */
 let problemData = [];
 let bestSolution = { route: null, distance: Infinity };
 let performanceHistory = [];
 let computeMetrics = { totalOperations: 0, startTime: 0, baselinePerformance: 0 };
 
-// ====== DOM ======
+/* ==== DOM ==== */
 const elements = {
   startDemo: document.getElementById('startDemo'),
   runOptimization: document.getElementById('runOptimization'),
@@ -357,36 +472,53 @@ const elements = {
 const problemCtx = elements.problemCanvas.getContext('2d');
 const chartCtx = elements.performanceChart.getContext('2d');
 
-// ====== UI Helpers ======
-function log(message, type = 'info') { const timestamp = new Date().toLocaleTimeString(); const logEntry = document.createElement('div'); logEntry.innerHTML = `<span style="color:var(--muted)">[${timestamp}]</span> ${message}`; elements.activityLog.appendChild(logEntry); elements.activityLog.scrollTop = elements.activityLog.scrollHeight; }
-function updateNetworkStatus(status, text) { elements.networkStatus.className = `status-badge status-${status}`; elements.statusText.textContent = text; }
+/* ==== UI Helpers ==== */
+function log(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  const logEntry = document.createElement('div');
+  logEntry.innerHTML = `<span style="color:var(--muted)">[${timestamp}]</span> ${message}`;
+  elements.activityLog.appendChild(logEntry);
+  elements.activityLog.scrollTop = elements.activityLog.scrollHeight;
+}
+function updateNetworkStatus(status, text) {
+  elements.networkStatus.className = `status-badge status-${status}`;
+  elements.statusText.textContent = text;
+}
 function updateMetrics() {
   const nodeCount = nodes.size;
   const computePower = computeMetrics.totalOperations / Math.max(1, (Date.now() - computeMetrics.startTime) / 1000);
   const performanceGain = nodeCount > 0 ? Math.max(1, nodeCount * 0.8) : 1;
   const costSavings = Math.round(computeMetrics.totalOperations * 0.0001 * nodeCount);
+
   elements.nodeCount.textContent = nodeCount;
   elements.computePower.textContent = Math.round(computePower);
   elements.performanceGain.textContent = `${performanceGain.toFixed(1)}`;
   elements.costSavings.textContent = `$${costSavings}`;
+
   document.getElementById('roiSavings').textContent = `$${Math.round(costSavings * 30)}`;
   document.getElementById('roiNodes').textContent = Math.round(nodeCount * 0.1);
   document.getElementById('roiEfficiency').textContent = `${Math.round((performanceGain - 1) * 100)}`;
+
   elements.nodeCountBadge.textContent = `${nodeCount} active`;
   elements.nodeCountBadge.className = `status-badge ${nodeCount > 0 ? 'status-active' : 'status-idle'}`;
 }
 function renderWorkerList() {
-  if (nodes.size === 0) { elements.workerList.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No active nodes</div>'; return; }
+  if (nodes.size === 0) {
+    elements.workerList.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No active nodes</div>';
+    return;
+  }
   elements.workerList.innerHTML = '';
   for (const [id, node] of nodes) {
-    const workerEl = document.createElement('div'); workerEl.className = 'worker';
-    const perfClass = node.latency < 100 ? 'perf-excellent' : node.latency < 300 ? 'perf-good' : 'perf-poor';
+    const workerEl = document.createElement('div');
+    workerEl.className = 'worker';
+    const latency = node.latency || 0;
+    const perfClass = latency < 100 ? 'perf-excellent' : latency < 300 ? 'perf-good' : 'perf-poor';
     workerEl.innerHTML = `
       <div>
         <div class="worker-id">${(id||'peer').toString().slice(0,8)}</div>
         <div class="worker-status">${node.status || 'active'}</div>
       </div>
-      <div class="perf-badge ${perfClass}">${node.latency||0}ms</div>
+      <div class="perf-badge ${perfClass}">${latency}ms</div>
       <div class="perf-badge">${node.operations || 0} ops</div>
       <div class="perf-badge">CPU ${node.cpu || '—'}%</div>
     `;
@@ -394,20 +526,31 @@ function renderWorkerList() {
   }
 }
 
-// ====== Problem generation / drawing ======
+/* ==== Problem generation / drawing ==== */
 function generateProblem(size) {
-  const canvas = elements.problemCanvas; const width = canvas.width; const height = canvas.height;
-  problemData = []; for (let i = 0; i < size; i++) { problemData.push({ x: Math.random() * (width - 100) + 50, y: Math.random() * (height - 100) + 50 }); }
-  bestSolution = { route: null, distance: Infinity }; performanceHistory = []; drawProblem();
+  const canvas = elements.problemCanvas;
+  const width = canvas.width, height = canvas.height;
+  problemData = [];
+  for (let i = 0; i < size; i++) {
+    problemData.push({ x: Math.random() * (width - 100) + 50, y: Math.random() * (height - 100) + 50 });
+  }
+  bestSolution = { route: null, distance: Infinity };
+  performanceHistory = [];
+  drawProblem();
 }
 function drawProblem() {
-  const ctx = problemCtx; const canvas = elements.problemCanvas; ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#f8f9fa'; for (const city of problemData) { ctx.beginPath(); ctx.arc(city.x, city.y, 4, 0, Math.PI * 2); ctx.fill(); }
+  const ctx = problemCtx, canvas = elements.problemCanvas;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#f8f9fa';
+  for (const city of problemData) { ctx.beginPath(); ctx.arc(city.x, city.y, 4, 0, Math.PI * 2); ctx.fill(); }
+
   if (bestSolution.route) {
     ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2; ctx.beginPath();
-    const route = bestSolution.route; ctx.moveTo(problemData[route[0]].x, problemData[route[0]].y);
+    const route = bestSolution.route;
+    ctx.moveTo(problemData[route[0]].x, problemData[route[0]].y);
     for (let i = 1; i < route.length; i++) ctx.lineTo(problemData[route[i]].x, problemData[route[i]].y);
-    ctx.lineTo(problemData[route[0]].x, problemData[route[0]].y); ctx.stroke();
+    ctx.lineTo(problemData[route[0]].x, problemData[route[0]].y);
+    ctx.stroke();
   }
   ctx.fillStyle = '#8892b0'; ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.fillText(`${problemData.length} cities`, 20, 30);
@@ -415,66 +558,78 @@ function drawProblem() {
 }
 function drawPerformanceChart() {
   if (performanceHistory.length < 2) return;
-  const ctx = chartCtx; const canvas = elements.performanceChart; const width = canvas.width; const height = canvas.height; ctx.clearRect(0, 0, width, height);
-  const minDistance = Math.min(...performanceHistory.map(p => p.distance)); const maxDistance = Math.max(...performanceHistory.map(p => p.distance)); const range = maxDistance - minDistance || 1;
+  const ctx = chartCtx, canvas = elements.performanceChart, width = canvas.width, height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  const minDistance = Math.min(...performanceHistory.map(p => p.distance));
+  const maxDistance = Math.max(...performanceHistory.map(p => p.distance));
+  const range = maxDistance - minDistance || 1;
   ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2; ctx.beginPath();
-  performanceHistory.forEach((point, index) => { const x = (index / (performanceHistory.length - 1)) * (width - 40) + 20; const y = height - 20 - ((point.distance - minDistance) / range) * (height - 40); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  performanceHistory.forEach((point, index) => {
+    const x = (index / (performanceHistory.length - 1)) * (width - 40) + 20;
+    const y = height - 20 - ((point.distance - minDistance) / range) * (height - 40);
+    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
   ctx.stroke();
 }
 
-// ====== Simulation + dispatch ======
+/* ==== Simulation + dispatch ==== */
 function simulateOptimizationStep() {
   if (!optimizationRunning || problemData.length === 0) return;
+
   const improvement = Math.random() * 0.02 * Math.max(1, nodes.size);
-  const newDistance = bestSolution.distance === Infinity ? calculateInitialDistance() : Math.max(bestSolution.distance * (1 - improvement), calculateInitialDistance() * 0.3);
+  const baseline = calculateInitialDistance();
+  const newDistance = bestSolution.distance === Infinity
+    ? baseline
+    : Math.max(bestSolution.distance * (1 - improvement), baseline * 0.3);
+
   if (newDistance < bestSolution.distance) {
-    bestSolution.distance = newDistance; bestSolution.route = generateRandomRoute();
+    bestSolution.distance = newDistance;
+    bestSolution.route = generateRandomRoute();
     performanceHistory.push({ time: Date.now(), distance: newDistance, nodes: nodes.size });
-    drawProblem(); drawPerformanceChart(); computeMetrics.totalOperations += nodes.size || 1; updateMetrics();
+    drawProblem(); drawPerformanceChart();
+    computeMetrics.totalOperations += nodes.size || 1;
+    updateMetrics();
     log(`Improved solution found: ${Math.round(newDistance)} (${nodes.size} nodes active)`);
   }
-  for (const [, node] of nodes) { node.operations = (node.operations || 0) + Math.floor(Math.random() * 10); node.cpu = Math.round(20 + Math.random() * 60); }
+
+  for (const [, node] of nodes) {
+    node.operations = (node.operations || 0) + Math.floor(Math.random() * 10);
+    node.cpu = Math.round(20 + Math.random() * 60);
+  }
   renderWorkerList();
 }
-function dispatchComputeTasks(){
+function dispatchComputeTasks() {
   if (!isCoordinator || !problemData.length) return;
   const params = { populationSize: 50 + Math.floor(Math.random()*20), generations: 15 + Math.floor(Math.random()*10), mutationRate: 0.1 };
-  for (const [, peer] of nodes){ if (peer?.dataChannel?.readyState === 'open'){ peer.send({ type: 'compute_task', taskId: (Date.now() + '-' + Math.random().toString(36).slice(2,6)), problemData, parameters: params }); } }
-}
-function calculateInitialDistance() { if (problemData.length === 0) return 0; let totalDistance = 0; for (let i = 0; i < problemData.length; i++) { const current = problemData[i]; const next = problemData[(i + 1) % problemData.length]; totalDistance += Math.hypot(next.x - current.x, next.y - current.y); } return totalDistance; }
-function generateRandomRoute() { const route = Array.from({ length: problemData.length }, (_, i) => i); for (let i = route.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [route[i], route[j]] = [route[j], route[i]]; } return route; }
-
-// ====== GA worker (used on workers for real compute) ======
-function performOptimizationStep(cities, params) {
-  const { populationSize = 50, generations = 20, mutationRate = 0.1 } = params || {};
-  // init
-  let population = [];
-  for (let i = 0; i < populationSize; i++) population.push(createRandomRoute(cities.length));
-  let bestRoute = null, bestDistance = Infinity;
-
-  for (let gen = 0; gen < generations; gen++) {
-    // evaluate
-    const fitness = population.map(route => 1 / calculateRouteDistance(route, cities));
-    // track best
-    for (let i = 0; i < population.length; i++) {
-      const d = calculateRouteDistance(population[i], cities);
-      if (d < bestDistance) { bestDistance = d; bestRoute = population[i].slice(); }
+  for (const [, peer] of nodes) {
+    if (peer?.dataChannel?.readyState === 'open') {
+      peer.send({ type: 'compute_task', taskId: (Date.now() + '-' + Math.random().toString(36).slice(2,6)), problemData, parameters: params });
     }
-    // next gen
-    const next = [];
-    next.push(bestRoute.slice()); // elitism
-    while (next.length < populationSize) {
-      const p1 = selectParent(population, fitness);
-      const p2 = selectParent(population, fitness);
-      let child = crossover(p1, p2);
-      if (Math.random() < mutationRate) child = mutate(child);
-      next.push(child);
-    }
-    population = next;
   }
-  return { route: bestRoute, distance: bestDistance, generations, populationSize };
 }
-function createRandomRoute(n){ return generateRandomRoute().slice(0,n); }
+function calculateInitialDistance() {
+  if (problemData.length === 0) return 0;
+  let total = 0;
+  for (let i = 0; i < problemData.length; i++) {
+    const a = problemData[i], b = problemData[(i + 1) % problemData.length];
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return total;
+}
+function generateRandomRoute() {
+  const n = problemData.length;
+  const route = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [route[i], route[j]] = [route[j], route[i]]; }
+  return route;
+}
+
+/* ==== GA worker (runs on workers for real compute) ==== */
+function shuffleRange(n){
+  const arr = Array.from({length:n}, (_,i)=>i);
+  for (let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+function createRandomRoute(n){ return shuffleRange(n); }
 function calculateRouteDistance(route, cities) {
   let total = 0;
   for (let i = 0; i < route.length; i++) {
@@ -497,77 +652,241 @@ function crossover(p1, p2) {
   return child;
 }
 function mutate(route){ const r = route.slice(); const i=Math.floor(Math.random()*r.length), j=Math.floor(Math.random()*r.length); [r[i],r[j]]=[r[j],r[i]]; return r; }
+function performOptimizationStep(cities, params) {
+  const { populationSize = 50, generations = 20, mutationRate = 0.1 } = params || {};
+  let population = []; for (let i = 0; i < populationSize; i++) population.push(createRandomRoute(cities.length));
+  let bestRoute = null, bestDistance = Infinity;
 
-// ====== Demo session management ======
+  for (let gen = 0; gen < generations; gen++) {
+    const fitness = population.map(route => 1 / calculateRouteDistance(route, cities));
+    for (let i = 0; i < population.length; i++) {
+      const d = calculateRouteDistance(population[i], cities);
+      if (d < bestDistance) { bestDistance = d; bestRoute = population[i].slice(); }
+    }
+    const next = [];
+    next.push(bestRoute.slice());
+    while (next.length < populationSize) {
+      const p1 = selectParent(population, fitness);
+      const p2 = selectParent(population, fitness);
+      let child = crossover(p1, p2);
+      if (Math.random() < mutationRate) child = mutate(child);
+      next.push(child);
+    }
+    population = next;
+  }
+  return { route: bestRoute, distance: bestDistance, generations, populationSize };
+}
+
+/* ==== Demo session management ==== */
 async function startDemoSession() {
   try {
-    sessionId = crypto.randomUUID?.()?.replace(/-/g,'') || Math.random().toString(36).slice(2,10);
-    isCoordinator = true; demoRunning = true; updateNetworkStatus('connecting', 'Starting Session...');
-    try { await connectToSignalServer(); log('🚀 Networking hooks ready'); log(`📡 Signaling: ${localFallbackMode ? 'Local BroadcastChannel' : 'WebSocket Server'}`); }
-    catch (error) { updateNetworkStatus('idle', 'No signaling server (okay)'); log('ℹ️ No signaling server detected — use Manual WebRTC panel'); }
+    sessionId = makeId(24);
+    isCoordinator = true; demoRunning = true;
+    updateNetworkStatus('connecting', 'Starting Session...');
+    try {
+      await connectToSignalServer();
+      log('🚀 Networking hooks ready');
+      log(`📡 Signaling: ${localFallbackMode ? 'Local BroadcastChannel' : 'WebSocket Server'}`);
+    } catch (error) {
+      updateNetworkStatus('idle', 'No signaling server (okay)');
+      log('ℹ️ No signaling server detected — use Manual WebRTC panel');
+    }
     log(`Session ID: ${sessionId.slice(0, 8)}`);
-    const inviteUrl = `${window.location.origin}${window.location.pathname}#join=${sessionId}`; elements.inviteUrl.textContent = inviteUrl; elements.inviteSection.style.display = 'block';
-    elements.startDemo.disabled = true; elements.runOptimization.disabled = false; elements.stopDemo.disabled = false; computeMetrics.startTime = Date.now();
-  } catch (error) { updateNetworkStatus('idle', 'Failed to Start'); log(`❌ Failed to start session: ${error.message}`); elements.startDemo.disabled = false; }
+    const inviteUrl = `${window.location.origin}${window.location.pathname}#join=${sessionId}`;
+    elements.inviteUrl.textContent = inviteUrl;
+    elements.inviteSection.style.display = 'block';
+
+    elements.startDemo.disabled = true;
+    elements.runOptimization.disabled = false;
+    elements.stopDemo.disabled = false;
+    computeMetrics.startTime = Date.now();
+  } catch (error) {
+    updateNetworkStatus('idle', 'Failed to Start');
+    log(`❌ Failed to start session: ${error.message}`);
+    elements.startDemo.disabled = false;
+  }
 }
 async function joinAsWorker(joinSessionId) {
   try {
-    sessionId = joinSessionId; isCoordinator = false; demoRunning = true; updateNetworkStatus('connecting', 'Joining Session...'); log(`🔗 Joining session: ${sessionId.slice(0, 8)}`);
-    await connectToSignalServer(); sendSignal({ type: 'peer_joined', from: peerId }); updateNetworkStatus('active', 'Connected as Compute Node'); log('✅ Successfully joined as compute node');
-    elements.startDemo.style.display = 'none'; elements.runOptimization.style.display = 'none'; elements.stopDemo.style.display = 'none'; elements.inviteSection.style.display = 'none';
-    const workerStatus = document.createElement('div'); workerStatus.className = 'value-prop'; workerStatus.innerHTML = '<strong>Worker Node Active:</strong> This browser is contributing compute power to the distributed network.'; document.querySelector('.hero-card').insertBefore(workerStatus, document.querySelector('h3'));
-  } catch (error) { updateNetworkStatus('idle', 'Failed to Join'); log(`❌ Failed to join session: ${error.message}`); }
+    sessionId = joinSessionId; isCoordinator = false; demoRunning = true;
+    updateNetworkStatus('connecting', 'Joining Session...');
+    log(`🔗 Joining session: ${sessionId.slice(0, 8)}`);
+    await connectToSignalServer();
+    sendSignal({ type: 'peer_joined', from: peerId });
+    updateNetworkStatus('active', 'Connected as Compute Node');
+    log('✅ Successfully joined as compute node');
+
+    elements.startDemo.style.display = 'none';
+    elements.runOptimization.style.display = 'none';
+    elements.stopDemo.style.display = 'none';
+    elements.inviteSection.style.display = 'none';
+
+    const workerStatus = document.createElement('div');
+    workerStatus.className = 'value-prop';
+    workerStatus.innerHTML = '<strong>Worker Node Active:</strong> This browser is contributing compute power to the distributed network.';
+    document.querySelector('.hero-card').insertBefore(workerStatus, document.querySelector('h3'));
+  } catch (error) {
+    updateNetworkStatus('idle', 'Failed to Join');
+    log(`❌ Failed to join session: ${error.message}`);
+  }
 }
-function stopDemoSession() { demoRunning = false; optimizationRunning = false; updateNetworkStatus('idle', 'Session Ended'); log('🛑 Demo session stopped'); elements.startDemo.disabled = false; elements.runOptimization.disabled = true; elements.stopDemo.disabled = true; elements.inviteSection.style.display = 'none'; nodes.clear(); updateMetrics(); renderWorkerList(); }
-function startOptimization() { const problemSize = parseInt(elements.problemSize.value); generateProblem(problemSize); optimizationRunning = true; elements.runOptimization.textContent = '⏸ Running...'; elements.runOptimization.disabled = true; log(`🎯 Starting optimization: ${problemSize} cities`); log(`Workload intensity: ${elements.workloadIntensity.value}/10`);
-  const optimizationInterval = setInterval(() => { if (!optimizationRunning) { clearInterval(optimizationInterval); elements.runOptimization.textContent = '▶ Run Optimization'; elements.runOptimization.disabled = false; return; } dispatchComputeTasks(); if (nodes.size === 0) simulateOptimizationStep(); }, 200);
+function stopDemoSession() {
+  demoRunning = false;
+  optimizationRunning = false;
+  if (optimizationInterval) {
+    clearInterval(optimizationInterval);
+    optimizationInterval = null;
+  }
+  updateNetworkStatus('idle', 'Session Ended');
+  log('🛑 Demo session stopped');
+  elements.startDemo.disabled = false;
+  elements.runOptimization.disabled = true;
+  elements.runOptimization.textContent = '▶ Run Optimization';
+  elements.stopDemo.disabled = true;
+  elements.inviteSection.style.display = 'none';
+  nodes.clear();
+  updateMetrics(); renderWorkerList();
 }
 
-function addSimulatedNode(id) { if (!demoRunning) return; const node = { id: id || crypto.randomUUID?.()?.replace(/-/g,'').slice(0, 8), status: 'connected', latency: Math.round(50 + Math.random() * 200), operations: 0, cpu: Math.round(10 + Math.random() * 30) }; nodes.set(node.id, node); updateMetrics(); renderWorkerList(); log(`📱 Node joined: ${node.id} (${node.latency}ms latency)`); }
+function startOptimization() {
+  if (optimizationRunning) {
+    // Stop the current optimization
+    optimizationRunning = false;
+    if (optimizationInterval) {
+      clearInterval(optimizationInterval);
+      optimizationInterval = null;
+    }
+    elements.runOptimization.textContent = '▶ Run Optimization';
+    elements.runOptimization.className = 'btn btn-success';
+    log('⏸ Optimization stopped');
+    return;
+  }
 
-// ====== Events ======
-// main controls
+  const problemSize = parseInt(elements.problemSize.value, 10);
+  generateProblem(problemSize);
+  optimizationRunning = true;
+  elements.runOptimization.textContent = '⏸ Stop Optimization';
+  elements.runOptimization.className = 'btn btn-secondary';
+
+  log(`🎯 Starting optimization: ${problemSize} cities`);
+  log(`Workload intensity: ${elements.workloadIntensity.value}/10`);
+
+  optimizationInterval = setInterval(() => {
+    if (!optimizationRunning) {
+      clearInterval(optimizationInterval);
+      optimizationInterval = null;
+      elements.runOptimization.textContent = '▶ Run Optimization';
+      elements.runOptimization.className = 'btn btn-success';
+      return;
+    }
+    dispatchComputeTasks();
+    if (nodes.size === 0) simulateOptimizationStep(); // local sim if no workers
+  }, 200);
+}
+
+function addSimulatedNode(id) {
+  if (!demoRunning) return;
+  const node = {
+    id: id || makeId(8),
+    status: 'connected',
+    latency: Math.round(50 + Math.random() * 200),
+    operations: 0,
+    cpu: Math.round(10 + Math.random() * 30)
+  };
+  nodes.set(node.id, node);
+  updateMetrics(); renderWorkerList();
+  log(`📱 Node joined: ${node.id} (${node.latency}ms latency)`);
+}
+
+/* ==== Events ==== */
 elements.startDemo.addEventListener('click', startDemoSession);
 elements.stopDemo.addEventListener('click', stopDemoSession);
 elements.runOptimization.addEventListener('click', startOptimization);
 
-// invite controls (single set)
 document.getElementById('copyInvite').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(elements.inviteUrl.textContent); log('📋 Invite link copied - share this with other computers!'); const instruction = document.createElement('div'); instruction.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--good);color:white;padding:12px;border-radius:8px;z-index:1000;'; instruction.innerHTML = '✅ Link copied! Share with other devices to add compute power.'; document.body.appendChild(instruction); setTimeout(() => instruction.remove(), 3000); } catch { log('❌ Failed to copy link'); }
+  try {
+    await navigator.clipboard.writeText(elements.inviteUrl.textContent);
+    log('📋 Invite link copied - share this with other computers!');
+    const instruction = document.createElement('div');
+    instruction.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--good);color:white;padding:12px;border-radius:8px;z-index:1000;';
+    instruction.innerHTML = '✅ Link copied! Share with other devices to add compute power.';
+    document.body.appendChild(instruction);
+    setTimeout(() => instruction.remove(), 3000);
+  } catch { log('❌ Failed to copy link'); }
 });
 document.getElementById('shareInvite').addEventListener('click', async () => {
-  const url = elements.inviteUrl.textContent; if (navigator.share) { try { await navigator.share({ title: 'Join NyxMesh Computing Demo', text: 'Help demonstrate distributed browser computing by joining this session', url }); log('📤 Invite shared successfully'); } catch (error) { if (error.name !== 'AbortError') { log('❌ Share failed, copying to clipboard instead'); navigator.clipboard.writeText(url); } } } else { showQRCode(url); }
+  const url = elements.inviteUrl.textContent;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Join NyxMesh Computing Demo', text: 'Help demonstrate distributed browser computing by joining this session', url });
+      log('📤 Invite shared successfully');
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        log('❌ Share failed, copying to clipboard instead');
+        navigator.clipboard.writeText(url);
+      }
+    }
+  } else { showQRCode(url); }
 });
-function showQRCode(url) { const modal = document.createElement('div'); modal.style.cssText = `position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000;`;
-  const content = document.createElement('div'); content.style.cssText = `background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; text-align: center; max-width: 400px;`;
+function showQRCode(url) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000;`;
+  const content = document.createElement('div');
+  content.style.cssText = `background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; text-align: center; max-width: 400px;`;
   content.innerHTML = `
     <h3 style="margin: 0 0 16px; color: var(--ink);">📱 Scan to Join</h3>
     <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" style="border-radius: 8px; background: white; padding: 8px;" alt="QR Code">
     <div style="margin: 16px 0; font-family: monospace; font-size: 12px; word-break: break-all; color: var(--muted);">${url}</div>
     <button class="btn btn-secondary" onclick="this.closest('[style*=fixed]').remove()">Close</button>`;
-  modal.appendChild(content); document.body.appendChild(modal); log('📱 QR code displayed - scan with phone/tablet to join'); }
-
-document.getElementById('openWorker').addEventListener('click', (e) => { const url = elements.inviteUrl.textContent; if (e.shiftKey) { for (let i = 0; i < 3; i++) { setTimeout(() => { const w = window.open(url, `_blank${i}`); if (w) log(`🚀 Opened worker tab ${i + 1}/3`); }, i * 500); } } else { const w = window.open(url, '_blank'); if (w) log('🚀 Opened worker tab - it will auto-connect'); else log('❌ Popup blocked - please allow popups or copy the link manually'); } });
+  modal.appendChild(content); document.body.appendChild(modal); log('📱 QR code displayed - scan with phone/tablet to join');
+}
+document.getElementById('openWorker').addEventListener('click', (e) => {
+  const url = elements.inviteUrl.textContent;
+  if (e.shiftKey) {
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        const w = window.open(url, `_blank${i}`);
+        if (w) log(`🚀 Opened worker tab ${i + 1}/3`);
+      }, i * 500);
+    }
+  } else {
+    const w = window.open(url, '_blank');
+    if (w) log('🚀 Opened worker tab - it will auto-connect');
+    else log('❌ Popup blocked - please allow popups or copy the link manually');
+  }
+});
 
 // hash join (optional server signaling path)
 window.addEventListener('hashchange', handleHashChange);
 window.addEventListener('load', handleHashChange);
-function handleHashChange() { const hash = window.location.hash.slice(1); const joinMatch = hash.match(/join=([^&]+)/); if (joinMatch && !demoRunning) joinAsWorker(joinMatch[1]); }
+function handleHashChange() {
+  const hash = window.location.hash.slice(1);
+  const joinMatch = hash.match(/join=([^&]+)/);
+  if (joinMatch && !demoRunning) joinAsWorker(joinMatch[1]);
+}
 
 // sliders
 elements.problemSize.addEventListener('input', (e) => { elements.problemSizeValue.textContent = e.target.value; });
 elements.workloadIntensity.addEventListener('input', (e) => { elements.workloadValue.textContent = e.target.value; });
 
 // keyboard shortcuts
-document.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey) { switch (e.key) { case '1': e.preventDefault(); if (!demoRunning) elements.startDemo.click(); break; case '2': e.preventDefault(); if (demoRunning && !elements.runOptimization.disabled) elements.runOptimization.click(); break; case '3': e.preventDefault(); if (demoRunning) document.getElementById('openWorker').click(); break; } } });
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    switch (e.key) {
+      case '1': e.preventDefault(); if (!demoRunning) elements.startDemo.click(); break;
+      case '2': e.preventDefault(); if (demoRunning) elements.runOptimization.click(); break;
+      case '3': e.preventDefault(); if (demoRunning) document.getElementById('openWorker').click(); break;
+    }
+  }
+});
 
-// metric animation (minor polish)
+// metric animation
 const animateMetricChange = (element) => { element.style.transform = 'scale(1.1)'; element.style.transition = 'transform 0.2s'; setTimeout(() => { element.style.transform = 'scale(1)'; }, 200); };
 const originalUpdateMetrics = updateMetrics;
 updateMetrics = function() { const oldNodeCount = elements.nodeCount.textContent; originalUpdateMetrics(); if (elements.nodeCount.textContent !== oldNodeCount) animateMetricChange(elements.nodeCount); };
 
-// ===== Manual WebRTC (copy/paste) =====
-const mr = { role: 'coordinator', pc: null, dc: null, gatherTimer: null, peerId: 'manual-' + (crypto.randomUUID?.().slice(0,8) || Math.random().toString(36).slice(2,10)) };
+/* ==== Manual WebRTC (copy/paste) ==== */
+const mr = { role: 'coordinator', pc: null, dc: null, gatherTimer: null, peerId: 'manual-' + makeId(8) };
 const MR_CONFIG = { iceServers: ICE_SERVERS, iceCandidatePoolSize: 10 };
 const mrPack = (d)=> btoa(unescape(encodeURIComponent(JSON.stringify(d))));
 const mrUnpack = (b64)=> JSON.parse(decodeURIComponent(escape(atob(b64.replace(/\s+/g,'')))));
@@ -575,25 +894,103 @@ const mrRoleInputs = document.querySelectorAll('input[name="mrRole"]');
 const mrLocal = document.getElementById('mrLocal');
 const mrRemote = document.getElementById('mrRemote');
 const mrState = document.getElementById('mrState');
+
 mrRoleInputs.forEach(r=>r.addEventListener('change',()=>{ mr.role=r.value; mrReset(); }));
-document.getElementById('mrCreate').onclick = async () => { try{ if(!mr.pc) mrSetupPC(); if(mr.role==='coordinator'){ const offer = await mr.pc.createOffer(); await mr.pc.setLocalDescription(offer); mrSetState('Gathering ICE…','connecting'); } else { if (!mr.pc.remoteDescription){ mrSetState('Set remote offer first','idle'); return; } const answer = await mr.pc.createAnswer(); await mr.pc.setLocalDescription(answer); mrSetState('Gathering ICE…','connecting'); } }catch(e){ console.error(e); mrSetState('Error creating SDP','idle'); } };
-document.getElementById('mrCopy').onclick = async () => { const t = mrLocal.value.trim(); if(!t) return; try{ await navigator.clipboard.writeText(t); mrSetState('Copied ✓','active'); }catch{ mrSetState('Copy failed','idle'); } };
-document.getElementById('mrSetRemote').onclick = async () => { try{ const raw = mrRemote.value.trim(); if(!raw){ mrSetState('Paste peer blob','idle'); return; } let desc; if (/^[A-Za-z0-9+/=\s]+$/.test(raw) && !/^\s*v=0/.test(raw)) desc = mrUnpack(raw); else if (/^\s*\{/.test(raw)) desc = JSON.parse(raw); else if (/^\s*v=0/.test(raw)) desc = { type: (mr.role==='coordinator'?'answer':'offer'), sdp: raw }; else throw new Error('Bad blob'); if(!mr.pc) mrSetupPC(); await mr.pc.setRemoteDescription(desc); mrSetState(`Remote ${desc.type} set`,'connecting'); }catch(e){ console.error(e); mrSetState('Invalid blob','idle'); } };
+document.getElementById('mrCreate').onclick = async () => {
+  try{
+    if(!mr.pc) mrSetupPC();
+    if(mr.role==='coordinator'){
+      const offer = await mr.pc.createOffer();
+      await mr.pc.setLocalDescription(offer);
+      mrSetState('Gathering ICE…','connecting');
+    } else {
+      if (!mr.pc.remoteDescription){ mrSetState('Set remote offer first','idle'); return; }
+      const answer = await mr.pc.createAnswer();
+      await mr.pc.setLocalDescription(answer);
+      mrSetState('Gathering ICE…','connecting');
+    }
+  }catch(e){ console.error(e); mrSetState('Error creating SDP','idle'); }
+};
+document.getElementById('mrCopy').onclick = async () => {
+  const t = mrLocal.value.trim(); if(!t) return;
+  try{ await navigator.clipboard.writeText(t); mrSetState('Copied ✓','active'); }
+  catch{ mrSetState('Copy failed','idle'); }
+};
+document.getElementById('mrSetRemote').onclick = async () => {
+  try{
+    const raw = mrRemote.value.trim();
+    if(!raw){ mrSetState('Paste peer blob','idle'); return; }
+    let desc;
+    if (/^[A-Za-z0-9+/=\s]+$/.test(raw) && !/^\s*v=0/.test(raw)) desc = mrUnpack(raw);
+    else if (/^\s*\{/.test(raw)) desc = JSON.parse(raw);
+    else if (/^\s*v=0/.test(raw)) desc = { type: (mr.role==='coordinator'?'answer':'offer'), sdp: raw };
+    else throw new Error('Bad blob');
+
+    if(!mr.pc) mrSetupPC();
+    await mr.pc.setRemoteDescription(desc);
+    mrSetState(`Remote ${desc.type} set`,'connecting');
+  }catch(e){ console.error(e); mrSetState('Invalid blob','idle'); }
+};
 function mrSetState(text, kind='idle'){ mrState.textContent = text; mrState.className = `status-badge status-${kind}`; }
 function mrReset(){ try{ mr.dc && mr.dc.close(); }catch{} try{ mr.pc && mr.pc.close(); }catch{} mr.pc = null; mr.dc = null; mrLocal.value=''; mrRemote.value=''; mrSetState('idle','idle'); }
-function mrSetupPC(){ mr.pc = new RTCPeerConnection(MR_CONFIG); let gatherTimer=null; mr.pc.onicecandidate = () => { if (gatherTimer) clearTimeout(gatherTimer); gatherTimer = setTimeout(()=>{ if (mr.pc.localDescription) mrLocal.value = mrPack(mr.pc.localDescription); }, 250); };
-  mr.pc.onconnectionstatechange = ()=>{ const s = mr.pc.connectionState; if (s==='connected'){ mrSetState('Connected ✓','active'); } else if (['failed','closed'].includes(s)){ mrSetState(s,'idle'); } };
-  if (mr.role==='coordinator'){ mr.dc = mr.pc.createDataChannel('compute', { ordered:true }); mrWireDC(mr.dc); } else { mr.pc.ondatachannel = (ev)=>{ mr.dc = ev.channel; mrWireDC(mr.dc); }; } }
-function mrWireDC(channel){ channel.onopen = ()=>{ const id = mr.peerId; const p = new NetworkPeer(id); p.pc = mr.pc; p.dataChannel = channel; p.setupDataChannel(); if (isCoordinator){ nodes.set(id, p); updateMetrics(); renderWorkerList(); log(`📱 Manual WebRTC node connected: ${id}`); } else { log('✅ DataChannel open (worker)'); } };
-  channel.onclose = ()=>{ if (isCoordinator && nodes.has(mr.peerId)) { nodes.delete(mr.peerId); updateMetrics(); renderWorkerList(); } mrSetState('Disconnected','idle'); };
-  channel.onerror = (e)=>{ console.error('DC error', e); mrSetState('DC error','idle'); }; }
+function mrSetupPC(){
+  mr.pc = new RTCPeerConnection(MR_CONFIG);
+  let gatherTimer=null;
+  mr.pc.onicecandidate = () => {
+    if (gatherTimer) clearTimeout(gatherTimer);
+    gatherTimer = setTimeout(()=>{ if (mr.pc.localDescription) mrLocal.value = mrPack(mr.pc.localDescription); }, 250);
+  };
+  mr.pc.onconnectionstatechange = ()=>{
+    const s = mr.pc.connectionState;
+    if (s==='connected'){ mrSetState('Connected ✓','active'); }
+    else if (['failed','closed'].includes(s)){ mrSetState(s,'idle'); }
+  };
+  if (mr.role==='coordinator'){
+    mr.dc = mr.pc.createDataChannel('compute', { ordered:true });
+    mrWireDC(mr.dc);
+  } else {
+    mr.pc.ondatachannel = (ev)=>{ mr.dc = ev.channel; mrWireDC(mr.dc); };
+  }
+}
+function mrWireDC(channel){
+  channel.onopen = ()=>{
+    const id = mr.peerId;
+    const p = new NetworkPeer(id);
+    p.pc = mr.pc; p.dataChannel = channel; p.setupDataChannel();
+    if (isCoordinator){
+      nodes.set(id, p); updateMetrics(); renderWorkerList();
+      log(`📱 Manual WebRTC node connected: ${id}`);
+    } else {
+      log('✅ DataChannel open (worker)');
+    }
+  };
+  channel.onclose = ()=>{
+    if (isCoordinator && nodes.has(mr.peerId)) {
+      nodes.delete(mr.peerId); updateMetrics(); renderWorkerList();
+    }
+    mrSetState('Disconnected','idle');
+  };
+  channel.onerror = (e)=>{ console.error('DC error', e); mrSetState('DC error','idle'); };
+}
 
-// ====== Init ======
+/* ==== Init ==== */
 log('🧬 NyxMesh platform ready');
 log('Click "Start Demo Session" then use the Manual WebRTC panel to connect peers.');
 
-// periodic metric refresh
-setInterval(() => { if (demoRunning) { updateMetrics(); if (Math.random() < 0.05 && nodes.size > 2) { const nodeIds = Array.from(nodes.keys()); const randomNode = nodeIds[Math.floor(Math.random() * nodeIds.length)]; nodes.delete(randomNode); log(`📱 Node disconnected: ${randomNode}`); updateMetrics(); renderWorkerList(); setTimeout(() => { if (demoRunning) { addSimulatedNode(randomNode); } }, 3000 + Math.random() * 2000); } } }, 3000);
+// periodic metric refresh & light churn simulation
+setInterval(() => {
+  if (demoRunning) {
+    updateMetrics();
+    if (Math.random() < 0.05 && nodes.size > 2) {
+      const nodeIds = Array.from(nodes.keys());
+      const randomNode = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+      nodes.delete(randomNode);
+      log(`📱 Node disconnected: ${randomNode}`);
+      updateMetrics(); renderWorkerList();
+      setTimeout(() => { if (demoRunning) addSimulatedNode(randomNode); }, 3000 + Math.random() * 2000);
+    }
+  }
+}, 3000);
 </script>
 </body>
 </html>
