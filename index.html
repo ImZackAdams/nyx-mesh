@@ -25,11 +25,15 @@
   .subtitle{color:var(--muted);font-size:16px;margin-bottom:20px;line-height:1.6}
   .value-prop{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin:16px 0}
   .value-prop strong{color:var(--accent)}
-  .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+  .metrics-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;margin:16px 0
+  }
   .metric{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center}
   .metric-label{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px}
-  .metric-value{font-size:28px;font-weight:800;color:var(--ink)}
-  .metric-unit{font-size:14px;color:var(--muted);margin-left:4px}
+  .metric-value{font-size:24px;font-weight:800;color:var(--ink)}
+  .metric-unit{font-size:12px;color:var(--muted);margin-left:4px}
   .status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600}
   .status-idle{background:rgba(139,92,246,0.2);color:#a78bfa}
   .status-active{background:rgba(34,197,94,0.2);color:#4ade80}
@@ -51,19 +55,12 @@
   .perf-excellent{background:rgba(34,197,94,0.2);color:#4ade80}
   .perf-good{background:rgba(251,191,36,0.2);color:#fbbf24}
   .perf-poor{background:rgba(239,68,68,0.2);color:#f87171}
-  .roi-section{background:linear-gradient(135deg, rgba(16,185,129,0.1), rgba(6,182,212,0.1));border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:16px;margin:16px 0}
-  .roi-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
-  .roi-metric{text-align:center}
-  .roi-metric .value{font-size:20px;font-weight:700;color:var(--good)}
-  .roi-metric .label{font-size:12px;color:var(--muted);margin-top:4px}
   .demo-controls{background:rgba(31,41,55,0.3);border-radius:12px;padding:16px;margin:16px 0}
   .activity-log{height:140px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted)}
   .invite-section{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px;margin:16px 0}
   .invite-url{font-family:ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;word-break:break-all;margin:8px 0}
   @media (max-width: 1100px) {
     .container{grid-template-columns:1fr;gap:16px}
-    .metrics-grid{grid-template-columns:1fr 1fr 1fr}
-    .roi-grid{grid-template-columns:1fr 1fr}
   }
 </style>
 </head>
@@ -75,7 +72,7 @@
     <div class="subtitle">Distributed Browser Computing Platform</div>
 
     <div class="value-prop">
-      <strong>Revolutionary Approach:</strong> Transform any web browser into a compute node. No installs, no cloud infrastructure, no limits. Scale computational workloads across thousands of browsers instantly.
+      Transform any web browser into a compute node. No installs, no cloud infrastructure, no limits. Scale computational workloads across thousands of browsers instantly.
     </div>
 
     <!-- Connection Status -->
@@ -85,26 +82,37 @@
       <span id="statusText">Ready to Connect</span>
     </div>
 
-    <!-- Key Metrics -->
+    <!-- Key Metrics (clear + relevant) -->
     <div class="metrics-grid">
       <div class="metric">
         <div class="metric-label">Active Nodes</div>
         <div class="metric-value" id="nodeCount">0</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Compute Power</div>
-        <div class="metric-value" id="computePower">0<span class="metric-unit">ops/s</span></div>
+        <div class="metric-label">Eval Rate</div>
+        <div class="metric-value"><span id="evalRate">0</span><span class="metric-unit">evals/s</span></div>
       </div>
       <div class="metric">
-        <div class="metric-label">Performance Gain</div>
-        <div class="metric-value" id="performanceGain">1.0<span class="metric-unit">×</span></div>
+        <div class="metric-label">Best Distance</div>
+        <div class="metric-value" id="bestDistance">—</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Cost Savings</div>
-        <div class="metric-value" id="costSavings">$0<span class="metric-unit"></span></div>
+        <div class="metric-label">Improvement</div>
+        <div class="metric-value"><span id="improvementPct">0</span><span class="metric-unit">%</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Median Latency</div>
+        <div class="metric-value"><span id="medianLatency">—</span><span class="metric-unit">ms</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Results</div>
+        <div class="metric-value"><span id="resultsRate">0</span><span class="metric-unit">/s</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Elapsed</div>
+        <div class="metric-value"><span id="elapsedSec">0</span><span class="metric-unit">s</span></div>
       </div>
     </div>
-
 
     <!-- Demo Controls -->
     <div class="demo-controls">
@@ -225,7 +233,7 @@ class NetworkPeer {
     this.dataChannel = null;
     this.status = 'connecting';
     this.latency = 0;
-    this.operations = 0;
+    this.evals = 0;
     this.cpu = 0;
     this._lastPing = 0;
     this._pingTimer = null;
@@ -299,7 +307,8 @@ class NetworkPeer {
   handleComputeTask(message) {
     const result = performOptimizationStep(message.problemData, message.parameters);
     this.send({ type: 'compute_result', taskId: message.taskId, result });
-    this.operations++; this.cpu = Math.min(100, this.cpu + Math.random() * 20);
+    this.evals += (result?.evals || 0);
+    this.cpu = Math.min(100, this.cpu + Math.random() * 20);
   }
   handleComputeResult(message) {
     if (message.result && message.result.distance < bestSolution.distance) {
@@ -307,7 +316,9 @@ class NetworkPeer {
       drawProblem();
       log(`🎯 Better solution: ${Math.round(bestSolution.distance)} from ${this.id.slice(0, 8)}`);
     }
-    computeMetrics.totalOperations++; this.operations++;
+    computeMetrics.evalsTotal += (message.result?.evals || 0);
+    computeMetrics.resultsTotal += 1;
+    this.evals += (message.result?.evals || 0);
   }
   async acceptOffer(offer) {
     await this.pc.setRemoteDescription(offer);
@@ -321,7 +332,6 @@ class NetworkPeer {
 
 /* ==== Signaling helpers ==== */
 function connectToSignalServer() {
-  // If we intentionally disabled WS (e.g., GitHub Pages), fall back immediately.
   if (!SIGNAL_URL) {
     if (broadcastChannel) {
       localFallbackMode = true;
@@ -330,7 +340,6 @@ function connectToSignalServer() {
       broadcastChannel.onmessage = (event) => handleSignalMessage(event.data);
       return Promise.resolve();
     }
-    // No BC available: just resolve; manual WebRTC will still work.
     updateNetworkStatus('idle', 'No signaling server (okay)');
     log('ℹ️ No signaling server configured; use Manual WebRTC');
     return Promise.resolve();
@@ -358,7 +367,6 @@ function connectToSignalServer() {
         }
       };
     } catch (error) {
-      // Fallback if constructor throws
       if (broadcastChannel) {
         localFallbackMode = true;
         updateNetworkStatus('active', 'Local Demo Mode');
@@ -368,7 +376,6 @@ function connectToSignalServer() {
       } else { reject(error); }
     }
   }).catch(() => {
-    // Fallback if WS failed asynchronously
     if (broadcastChannel) {
       localFallbackMode = true;
       updateNetworkStatus('active', 'Local Demo Mode');
@@ -445,7 +452,12 @@ async function handleSignalMessage(message) {
 let problemData = [];
 let bestSolution = { route: null, distance: Infinity };
 let performanceHistory = [];
-let computeMetrics = { totalOperations: 0, startTime: 0, baselinePerformance: 0 };
+let computeMetrics = {
+  evalsTotal: 0,
+  resultsTotal: 0,
+  startTime: 0,
+  baselineDistance: Infinity
+};
 
 /* ==== DOM ==== */
 const elements = {
@@ -455,9 +467,12 @@ const elements = {
   networkStatus: document.getElementById('networkStatus'),
   statusText: document.getElementById('statusText'),
   nodeCount: document.getElementById('nodeCount'),
-  computePower: document.getElementById('computePower'),
-  performanceGain: document.getElementById('performanceGain'),
-  costSavings: document.getElementById('costSavings'),
+  evalRate: document.getElementById('evalRate'),
+  bestDistance: document.getElementById('bestDistance'),
+  improvementPct: document.getElementById('improvementPct'),
+  medianLatency: document.getElementById('medianLatency'),
+  resultsRate: document.getElementById('resultsRate'),
+  elapsedSec: document.getElementById('elapsedSec'),
   inviteSection: document.getElementById('inviteSection'),
   inviteUrl: document.getElementById('inviteUrl'),
   workerList: document.getElementById('workerList'),
@@ -485,20 +500,38 @@ function updateNetworkStatus(status, text) {
   elements.networkStatus.className = `status-badge status-${status}`;
   elements.statusText.textContent = text;
 }
+function median(arr){
+  if (!arr.length) return null;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length%2 ? s[mid] : Math.round((s[mid-1]+s[mid])/2);
+}
 function updateMetrics() {
   const nodeCount = nodes.size;
-  const computePower = computeMetrics.totalOperations / Math.max(1, (Date.now() - computeMetrics.startTime) / 1000);
-  const performanceGain = nodeCount > 0 ? Math.max(1, nodeCount * 0.8) : 1;
-  const costSavings = Math.round(computeMetrics.totalOperations * 0.0001 * nodeCount);
+  const elapsed = Math.max(1, (Date.now() - computeMetrics.startTime) / 1000);
+  const evalRate = computeMetrics.evalsTotal / elapsed;
+  const resRate = computeMetrics.resultsTotal / elapsed;
+
+  // Median latency of connected nodes with measured latency
+  const lats = Array.from(nodes.values())
+    .filter(n => n.status === 'connected' && typeof n.latency === 'number' && n.latency > 0)
+    .map(n => n.latency);
+  const medLat = median(lats);
 
   elements.nodeCount.textContent = nodeCount;
-  elements.computePower.textContent = Math.round(computePower);
-  elements.performanceGain.textContent = `${performanceGain.toFixed(1)}`;
-  elements.costSavings.textContent = `$${costSavings}`;
+  elements.evalRate.textContent = Math.round(evalRate);
+  elements.resultsRate.textContent = resRate.toFixed(2);
+  elements.elapsedSec.textContent = Math.floor(elapsed);
 
-  document.getElementById('roiSavings').textContent = `$${Math.round(costSavings * 30)}`;
-  document.getElementById('roiNodes').textContent = Math.round(nodeCount * 0.1);
-  document.getElementById('roiEfficiency').textContent = `${Math.round((performanceGain - 1) * 100)}`;
+  const best = bestSolution.distance;
+  elements.bestDistance.textContent = (best === Infinity) ? '—' : Math.round(best);
+  if (computeMetrics.baselineDistance && isFinite(computeMetrics.baselineDistance) && isFinite(best)) {
+    const imp = Math.max(0, ((computeMetrics.baselineDistance - best) / computeMetrics.baselineDistance) * 100);
+    elements.improvementPct.textContent = Math.round(imp);
+  } else {
+    elements.improvementPct.textContent = '0';
+  }
+  elements.medianLatency.textContent = (medLat == null) ? '—' : medLat;
 
   elements.nodeCountBadge.textContent = `${nodeCount} active`;
   elements.nodeCountBadge.className = `status-badge ${nodeCount > 0 ? 'status-active' : 'status-idle'}`;
@@ -519,9 +552,9 @@ function renderWorkerList() {
         <div class="worker-id">${(id||'peer').toString().slice(0,8)}</div>
         <div class="worker-status">${node.status || 'active'}</div>
       </div>
-      <div class="perf-badge ${perfClass}">${latency}ms</div>
-      <div class="perf-badge">${node.operations || 0} ops</div>
-      <div class="perf-badge">CPU ${node.cpu || '—'}%</div>
+      <div class="perf-badge ${perfClass}">${latency || '—'}ms</div>
+      <div class="perf-badge">${node.evals || 0} evals</div>
+      <div class="perf-badge">CPU ${node.cpu ?? '—'}%</div>
     `;
     elements.workerList.appendChild(workerEl);
   }
@@ -577,39 +610,56 @@ function drawPerformanceChart() {
 function simulateOptimizationStep() {
   if (!optimizationRunning || problemData.length === 0) return;
 
-  const improvement = Math.random() * 0.02 * Math.max(1, nodes.size);
-  const baseline = calculateInitialDistance();
-  const newDistance = bestSolution.distance === Infinity
-    ? baseline
-    : Math.max(bestSolution.distance * (1 - improvement), baseline * 0.3);
+  const workload = parseInt(elements.workloadIntensity.value, 10) || 5;
+  const pop = 30 + workload * 10;
+  const gens = 8 + workload * 2;
+  const syntheticEvals = pop * gens;
 
-  if (newDistance < bestSolution.distance) {
+  const improvement = Math.random() * 0.02 * Math.max(1, nodes.size || 1);
+  const baseline = computeMetrics.baselineDistance || calculateInitialDistance();
+  const current = (bestSolution.distance === Infinity) ? baseline : bestSolution.distance;
+  const newDistance = Math.max(current * (1 - improvement), baseline * 0.3);
+
+  if (newDistance < (bestSolution.distance || Infinity)) {
     bestSolution.distance = newDistance;
     bestSolution.route = generateRandomRoute();
     performanceHistory.push({ time: Date.now(), distance: newDistance, nodes: nodes.size });
     drawProblem(); drawPerformanceChart();
-    computeMetrics.totalOperations += nodes.size || 1;
-    updateMetrics();
-    log(`Improved solution found: ${Math.round(newDistance)} (${nodes.size} nodes active)`);
   }
 
+  // Bump metrics so the dashboard is meaningful in “local sim”
+  computeMetrics.evalsTotal += syntheticEvals;
+  computeMetrics.resultsTotal += 1;
+
   for (const [, node] of nodes) {
-    node.operations = (node.operations || 0) + Math.floor(Math.random() * 10);
+    node.evals = (node.evals || 0) + Math.floor(Math.random() * (syntheticEvals / Math.max(1, nodes.size)));
     node.cpu = Math.round(20 + Math.random() * 60);
   }
+  updateMetrics();
   renderWorkerList();
+  log(`Improved solution: ${Math.round(newDistance)} (${nodes.size} nodes)`);
 }
 function dispatchComputeTasks() {
   if (!isCoordinator || !problemData.length) return;
-  const params = { populationSize: 50 + Math.floor(Math.random()*20), generations: 15 + Math.floor(Math.random()*10), mutationRate: 0.1 };
+  const workload = parseInt(elements.workloadIntensity.value, 10) || 5;
+  const params = {
+    populationSize: 30 + workload * 10,
+    generations: 8 + workload * 2,
+    mutationRate: 0.1
+  };
   for (const [, peer] of nodes) {
     if (peer?.dataChannel?.readyState === 'open') {
-      peer.send({ type: 'compute_task', taskId: (Date.now() + '-' + Math.random().toString(36).slice(2,6)), problemData, parameters: params });
+      peer.send({
+        type: 'compute_task',
+        taskId: (Date.now() + '-' + Math.random().toString(36).slice(2,6)),
+        problemData,
+        parameters: params
+      });
     }
   }
 }
 function calculateInitialDistance() {
-  if (problemData.length === 0) return 0;
+  if (problemData.length === 0) return Infinity;
   let total = 0;
   for (let i = 0; i < problemData.length; i++) {
     const a = problemData[i], b = problemData[(i + 1) % problemData.length];
@@ -657,15 +707,23 @@ function performOptimizationStep(cities, params) {
   const { populationSize = 50, generations = 20, mutationRate = 0.1 } = params || {};
   let population = []; for (let i = 0; i < populationSize; i++) population.push(createRandomRoute(cities.length));
   let bestRoute = null, bestDistance = Infinity;
+  let evals = 0;
 
   for (let gen = 0; gen < generations; gen++) {
-    const fitness = population.map(route => 1 / calculateRouteDistance(route, cities));
+    // Evaluate current population once
+    const dists = population.map(route => calculateRouteDistance(route, cities));
+    evals += population.length;
+
+    // Track best
     for (let i = 0; i < population.length; i++) {
-      const d = calculateRouteDistance(population[i], cities);
+      const d = dists[i];
       if (d < bestDistance) { bestDistance = d; bestRoute = population[i].slice(); }
     }
+
+    // Selection (tournament via fitness), then crossover/mutation
+    const fitness = dists.map(d => 1 / d);
     const next = [];
-    next.push(bestRoute.slice());
+    next.push(bestRoute.slice()); // elitism
     while (next.length < populationSize) {
       const p1 = selectParent(population, fitness);
       const p2 = selectParent(population, fitness);
@@ -675,12 +733,11 @@ function performOptimizationStep(cities, params) {
     }
     population = next;
   }
-  return { route: bestRoute, distance: bestDistance, generations, populationSize };
+  return { route: bestRoute, distance: bestDistance, generations, populationSize, evals };
 }
 
 /* ==== Demo session management ==== */
 async function startDemoSession() {
-  // Prepare session & UI immediately (avoids GH Pages WS hang)
   sessionId = makeId(24);
   isCoordinator = true; demoRunning = true;
   updateNetworkStatus('connecting', 'Starting Session...');
@@ -688,7 +745,6 @@ async function startDemoSession() {
   elements.runOptimization.disabled = false;
   elements.stopDemo.disabled = false;
 
-  // Try signaling, but don't block UI
   try {
     await withTimeout(connectToSignalServer(), 2000);
     log('🚀 Networking hooks ready');
@@ -762,6 +818,11 @@ function startOptimization() {
 
   const problemSize = parseInt(elements.problemSize.value, 10);
   generateProblem(problemSize);
+  computeMetrics.evalsTotal = 0;
+  computeMetrics.resultsTotal = 0;
+  computeMetrics.startTime = Date.now();
+  computeMetrics.baselineDistance = calculateInitialDistance();
+
   optimizationRunning = true;
   elements.runOptimization.textContent = '⏸ Stop Optimization';
   elements.runOptimization.className = 'btn btn-secondary';
@@ -779,6 +840,7 @@ function startOptimization() {
     }
     dispatchComputeTasks();
     if (nodes.size === 0) simulateOptimizationStep(); // local sim if no workers
+    else updateMetrics();
   }, 200);
 }
 
@@ -788,7 +850,7 @@ function addSimulatedNode(id) {
     id: id || makeId(8),
     status: 'connected',
     latency: Math.round(50 + Math.random() * 200),
-    operations: 0,
+    evals: 0,
     cpu: Math.round(10 + Math.random() * 30)
   };
   nodes.set(node.id, node);
@@ -881,7 +943,11 @@ document.addEventListener('keydown', (e) => {
 // metric animation
 const animateMetricChange = (element) => { element.style.transform = 'scale(1.1)'; element.style.transition = 'transform 0.2s'; setTimeout(() => { element.style.transform = 'scale(1)'; }, 200); };
 const originalUpdateMetrics = updateMetrics;
-updateMetrics = function() { const oldNodeCount = elements.nodeCount.textContent; originalUpdateMetrics(); if (elements.nodeCount.textContent !== oldNodeCount) animateMetricChange(elements.nodeCount); };
+updateMetrics = function() {
+  const oldNodeCount = document.getElementById('nodeCount').textContent;
+  originalUpdateMetrics();
+  if (document.getElementById('nodeCount').textContent !== oldNodeCount) animateMetricChange(document.getElementById('nodeCount'));
+};
 
 /* ==== Manual WebRTC (copy/paste) ==== */
 const mr = { role: 'coordinator', pc: null, dc: null, gatherTimer: null, peerId: 'manual-' + makeId(8) };
